@@ -199,11 +199,29 @@ class Transaction(BaseModel):
  
 @app.post("/acc/decide")
 def acc_decide(transactions: List[Transaction] = Body(...)):
+    # Import MCP integration
+    try:
+        from mcp_integration import run_async_acc_decide
+        
+        # Convert Pydantic models to dict for MCP processing
+        transaction_dicts = [txn.dict() for txn in transactions]
+        
+        # Use enhanced MCP-integrated decision logic
+        return run_async_acc_decide(transaction_dicts)
+        
+    except ImportError as e:
+        # Fallback to original logic if MCP not available
+        print(f"MCP integration not available, using fallback: {e}")
+        return acc_decide_fallback(transactions)
+
+
+def acc_decide_fallback(transactions: List[Transaction]):
+    """Fallback ACC decision logic without MCP"""
     results = []
- 
+
     for txn in transactions:
         verifications = {}
- 
+
         if txn.additional_fields.pan_number:
             verifications["pan"] = verify_pan(txn.additional_fields.pan_number)
         # No direct Aadhaar verification as it's sensitive data
@@ -216,7 +234,7 @@ def acc_decide(transactions: List[Transaction] = Body(...)):
                 txn.receiver.name,
                 None  # Phone is optional
             )
- 
+
         try:
             opa_input = {
                 "policy_version": "acc-1.4.2",
@@ -224,7 +242,7 @@ def acc_decide(transactions: List[Transaction] = Body(...)):
                 "verifications": verifications
             }
             opa_result = call_opa(opa_input)
- 
+
             results.append({
             "line_id": txn.transaction_id,
             "decision": "PASS" if opa_result["result"]["allow"] else "FAIL",
@@ -240,5 +258,57 @@ def acc_decide(transactions: List[Transaction] = Body(...)):
                 "reasons": [str(e)],
                 "evidence_refs": []
             })
- 
+
     return {"decisions": results}
+
+
+# ========================================
+# MCP Integration Endpoints
+# ========================================
+
+@app.get("/acc/mcp/health")
+async def mcp_health_check():
+    """Check MCP server health"""
+    try:
+        from mcp_integration import acc_mcp
+        return await acc_mcp.health_check()
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+@app.get("/acc/mcp/analytics")
+async def get_compliance_analytics(period: str = "24h"):
+    """Get compliance analytics via MCP"""
+    try:
+        from mcp_integration import acc_mcp
+        return await acc_mcp.get_compliance_analytics(period)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/acc/decision/{transaction_id}")
+async def get_acc_decision(transaction_id: str):
+    """Get ACC decision for a transaction via MCP"""
+    try:
+        from mcp_integration import acc_mcp
+        result = await acc_mcp.get_acc_decision(transaction_id)
+        if result and not result.get("error"):
+            return result
+        else:
+            return {"error": "ACC decision not found"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/acc/intent/{transaction_id}")
+async def get_intent_details(transaction_id: str):
+    """Get intent details via MCP"""
+    try:
+        from mcp_integration import acc_mcp
+        result = await acc_mcp.get_intent_details(transaction_id)
+        if result and not result.get("error"):
+            return result
+        else:
+            return {"error": "Intent not found"}
+    except Exception as e:
+        return {"error": str(e)}

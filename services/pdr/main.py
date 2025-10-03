@@ -22,6 +22,7 @@ from models import (
 from database import db_manager
 from scoring_engine import RailScoringEngine
 from mock_rail_apis import MockRailAPIs
+from mcp_client import mcp_client, MCPSession
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -382,11 +383,19 @@ async def process_pending_intents(background_tasks: BackgroundTasks, limit: int 
     """Process pending intents in background"""
     
     async def process_background():
-        pending_intents = db_manager.get_pending_intents(limit)
-        if pending_intents:
-            request = PDRRequest(intents=pending_intents)
-            result = await pdr_service.process_intents(request)
-            logger.info(f"Processed {result.total_processed} pending intents")
+        try:
+            # Use MCP client for batch processing
+            async with MCPSession() as client:
+                result = await client.process_pending_intents_batch(limit)
+                logger.info(f"MCP batch processing: {result}")
+        except Exception as e:
+            # Fallback to direct database processing
+            logger.warning(f"MCP batch processing failed, using fallback: {e}")
+            pending_intents = db_manager.get_pending_intents(limit)
+            if pending_intents:
+                request = PDRRequest(intents=pending_intents)
+                result = await pdr_service.process_intents(request)
+                logger.info(f"Processed {result.total_processed} pending intents")
     
     background_tasks.add_task(process_background)
     return {"message": f"Processing up to {limit} pending intents in background"}
@@ -405,6 +414,70 @@ async def setup_database():
         return {"message": "Database schema setup completed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database setup failed: {str(e)}")
+
+
+# ========================================
+# MCP Integration Endpoints
+# ========================================
+
+@app.get("/pdr/mcp/health")
+async def mcp_health_check():
+    """Check MCP server health"""
+    try:
+        async with MCPSession() as client:
+            return await client.health_check()
+    except Exception as e:
+        return {"status": "unhealthy", "error": str(e)}
+
+
+@app.get("/pdr/mcp/analytics")
+async def get_mcp_analytics():
+    """Get analytics dashboard via MCP"""
+    try:
+        async with MCPSession() as client:
+            return await client.get_analytics_dashboard()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/pdr/mcp/decision/{transaction_id}")
+async def generate_mcp_decision(transaction_id: str, custom_weights: Optional[Dict[str, float]] = None):
+    """Generate PDR decision via MCP"""
+    try:
+        async with MCPSession() as client:
+            return await client.generate_pdr_decision(transaction_id, custom_weights)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/pdr/mcp/execute/{transaction_id}")
+async def execute_mcp_transaction(transaction_id: str, force_rail: Optional[str] = None):
+    """Execute transaction via MCP"""
+    try:
+        async with MCPSession() as client:
+            return await client.execute_rail_transaction(transaction_id, force_rail)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/pdr/mcp/rails/{rail_name}/performance")
+async def get_mcp_rail_performance(rail_name: str, days: int = 30):
+    """Get rail performance via MCP"""
+    try:
+        async with MCPSession() as client:
+            return await client.get_rail_performance(rail_name, days)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/pdr/mcp/batch-process")
+async def mcp_batch_process(limit: int = 100):
+    """Process pending intents via MCP batch operation"""
+    try:
+        async with MCPSession() as client:
+            return await client.process_pending_intents_batch(limit)
+    except Exception as e:
+        return {"error": str(e)}
 
 
 if __name__ == "__main__":
