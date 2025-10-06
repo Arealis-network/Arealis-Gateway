@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/demo/page-header"
 import { KpiCard } from "@/components/demo/kpi-card"
 import { Download } from "lucide-react"
 import { AdvisoryBanner } from "@/components/demo/advisory-banner"
+import { fetchLiveQueueData, type LiveQueueData } from "@/lib/agents-api"
+import { useEffect, useState } from "react"
 
 const pendingPayments = [
   {
@@ -69,6 +71,30 @@ const dispatched = [
 ]
 
 export default function LiveQueuePage() {
+  const [liveQueueData, setLiveQueueData] = useState<LiveQueueData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch live queue data from PDR agent
+  useEffect(() => {
+    const loadLiveQueueData = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchLiveQueueData();
+        setLiveQueueData(data);
+      } catch (error) {
+        console.error('Error loading live queue data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadLiveQueueData();
+    
+    // Refresh data every 10 seconds for real-time updates
+    const interval = setInterval(loadLiveQueueData, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -86,9 +112,24 @@ export default function LiveQueuePage() {
       />
       <AdvisoryBanner className="mt-2" />
       <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard label="In Queue" value="2,847" delta="+18.2% vs 24h" trend="up" />
-        <KpiCard label="Release Queue" value="312" delta="Re-score in next 2m" trend="flat" />
-        <KpiCard label="Success Rate" value="98.7%" delta="Stable" trend="flat" />
+        <KpiCard 
+          label="In Queue" 
+          value={loading ? "..." : (liveQueueData?.queue_metrics?.in_queue?.toLocaleString() || "2,847")} 
+          delta={loading ? "..." : `+${liveQueueData?.queue_metrics?.queue_change_percent?.toFixed(1) || '18.2'}% vs 24h`} 
+          trend="up" 
+        />
+        <KpiCard 
+          label="Release Queue" 
+          value={loading ? "..." : (liveQueueData?.queue_metrics?.release_queue?.toString() || "312")} 
+          delta={loading ? "..." : `Re-score in next ${liveQueueData?.queue_metrics?.rescore_in_minutes || 2}m`} 
+          trend="flat" 
+        />
+        <KpiCard 
+          label="Success Rate" 
+          value={loading ? "..." : `${liveQueueData?.queue_metrics?.success_rate?.toFixed(1) || '98.7'}%`} 
+          delta="Stable" 
+          trend="flat" 
+        />
       </div>
 
       <Tabs defaultValue="pending" className="w-full">
@@ -123,20 +164,26 @@ export default function LiveQueuePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingPayments.map((payment) => (
+                  {(liveQueueData?.pending_payments || pendingPayments).map((payment) => (
                     <TableRow key={payment.id} className="hover:bg-muted/40 transition-colors">
                       <TableCell className="font-mono text-sm">{payment.id}</TableCell>
                       <TableCell className="font-medium">{payment.amount}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="bg-secondary text-secondary-foreground">
-                          {payment.railCandidate}
+                          {payment.rail_candidate || payment.railCandidate}
                         </Badge>
                       </TableCell>
-                      <TableCell>{payment.nextAction}</TableCell>
+                      <TableCell>{payment.next_action || payment.nextAction}</TableCell>
                       <TableCell>{payment.age}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="bg-success/15 text-success-foreground">
-                          {payment.sla}
+                        <Badge variant="outline" className={
+                          (payment.sla_status === 'on_track' || payment.sla === 'On track') ? 
+                          "bg-success/15 text-success-foreground" :
+                          (payment.sla_status === 'warning' || payment.sla === 'Warning') ?
+                          "bg-warning/15 text-warning-foreground" :
+                          "bg-destructive/15 text-destructive-foreground"
+                        }>
+                          {payment.sla_status || payment.sla}
                         </Badge>
                       </TableCell>
                       <TableCell>

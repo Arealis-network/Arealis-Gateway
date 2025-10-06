@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/chart"
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis, LineChart } from "recharts"
 import { TriangleAlert } from "lucide-react"
+import { fetchRailHealthData, type RailHealthData } from "@/lib/agents-api"
+import { useEffect, useState } from "react"
 
 const successData = [
   { time: "00:00", IMPS: 98, NEFT: 96, RTGS: 99 },
@@ -38,6 +40,40 @@ const penaltyTrend = [
 ]
 
 export default function RailHealthPage() {
+  const [railHealthData, setRailHealthData] = useState<RailHealthData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // Fetch rail health data from PDR agent
+  useEffect(() => {
+    const loadRailHealthData = async () => {
+      try {
+        setLoading(true)
+        const data = await fetchRailHealthData()
+        setRailHealthData(data)
+      } catch (error) {
+        console.error('Error loading rail health data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadRailHealthData()
+    
+    // Refresh data every 30 seconds for real-time updates
+    const interval = setInterval(loadRailHealthData, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Get rail performance data for charts
+  const getRailPerformanceData = () => {
+    if (!railHealthData?.rail_performance) return successData
+    
+    return railHealthData.rail_performance.map(rail => ({
+      time: new Date(rail.last_updated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      [rail.rail_name]: rail.success_rate,
+    }))
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -55,31 +91,55 @@ export default function RailHealthPage() {
         <AlertDescription className="text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-warning-foreground/95">Advisories:</span>
-            {/* Vivid NEFT chip with ring */}
-            <Badge
-              variant="outline"
-              className="px-2.5 py-0.5 text-xs bg-warning/25 text-warning-foreground ring-1 ring-warning/40"
-            >
-              NEFT
-            </Badge>
-            <span className="text-muted-foreground">penalty high, window closing</span>
-            <span className="text-muted-foreground">→</span>
-            <span className="text-muted-foreground">prefer</span>
-            {/* Vivid IMPS chip with ring */}
-            <Badge
-              variant="outline"
-              className="px-2.5 py-0.5 text-xs bg-success/25 text-success-foreground ring-1 ring-success/40"
-            >
-              IMPS
-            </Badge>
-            <span className="text-muted-foreground">for next</span>
-            {/* More readable time chip */}
-            <Badge
-              variant="outline"
-              className="px-2.5 py-0.5 text-xs bg-primary/25 text-primary-foreground ring-1 ring-primary/40"
-            >
-              30m
-            </Badge>
+            {loading ? (
+              <span className="text-muted-foreground">Loading rail status...</span>
+            ) : (
+              <>
+                {railHealthData?.rail_advisories?.map((advisory, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={`px-2.5 py-0.5 text-xs ${
+                        advisory.severity === 'high' 
+                          ? 'bg-warning/25 text-warning-foreground ring-1 ring-warning/40'
+                          : 'bg-success/25 text-success-foreground ring-1 ring-success/40'
+                      }`}
+                    >
+                      {advisory.rail_name}
+                    </Badge>
+                    <span className="text-muted-foreground">{advisory.message}</span>
+                    {index < (railHealthData?.rail_advisories?.length || 0) - 1 && (
+                      <span className="text-muted-foreground">→</span>
+                    )}
+                  </div>
+                )) || (
+                  <>
+                    <Badge
+                      variant="outline"
+                      className="px-2.5 py-0.5 text-xs bg-warning/25 text-warning-foreground ring-1 ring-warning/40"
+                    >
+                      NEFT
+                    </Badge>
+                    <span className="text-muted-foreground">penalty high, window closing</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-muted-foreground">prefer</span>
+                    <Badge
+                      variant="outline"
+                      className="px-2.5 py-0.5 text-xs bg-success/25 text-success-foreground ring-1 ring-success/40"
+                    >
+                      IMPS
+                    </Badge>
+                    <span className="text-muted-foreground">for next</span>
+                    <Badge
+                      variant="outline"
+                      className="px-2.5 py-0.5 text-xs bg-primary/25 text-primary-foreground ring-1 ring-primary/40"
+                    >
+                      30m
+                    </Badge>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </AlertDescription>
       </Alert>
@@ -101,7 +161,7 @@ export default function RailHealthPage() {
             }}
             className="h-[260px]"
           >
-            <LineChart data={successData}>
+            <LineChart data={getRailPerformanceData()}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="time" />
               <YAxis unit="%" />
@@ -212,11 +272,11 @@ export default function RailHealthPage() {
         </CardHeader>
         <CardContent>
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {[
+            {(railHealthData?.cutoff_timers || [
               { rail: "NEFT", cutoff: "In 22m", tone: "warning" },
               { rail: "RTGS", cutoff: "In 2h 10m", tone: "default" },
               { rail: "IMPS", cutoff: "No cut-off", tone: "success" },
-            ].map((c) => (
+            ]).map((c) => (
               <li key={c.rail} className="rounded-lg border p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">{c.rail}</span>
@@ -230,7 +290,7 @@ export default function RailHealthPage() {
                           : "bg-muted text-muted-foreground"
                     }
                   >
-                    {c.cutoff}
+                    {c.cutoff || c.time_remaining}
                   </Badge>
                 </div>
               </li>

@@ -8,10 +8,51 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
-import { Upload, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Upload, AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { createBatch, type BatchCreationRequest, type BatchCreationResponse } from "@/lib/agents-api"
 
 export default function CreatePage() {
   const [requiresApproval, setRequiresApproval] = useState(true)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [csvData, setCsvData] = useState<string>("")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [batchResult, setBatchResult] = useState<BatchCreationResponse | null>(null)
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === 'text/csv') {
+      setSelectedFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setCsvData(e.target?.result as string)
+      }
+      reader.readAsText(file)
+    }
+  }
+
+  const handleBatchSubmit = async () => {
+    if (!selectedFile || !csvData) return
+
+    setIsProcessing(true)
+    try {
+      const request: BatchCreationRequest = {
+        filename: selectedFile.name,
+        csv_data: csvData,
+        batch_type: 'vendor_payments', // Default type, could be made configurable
+        metadata: {
+          total_amount: 0, // Could be calculated from CSV
+          transaction_count: csvData.split('\n').length - 1, // Rough count
+        }
+      }
+
+      const result = await createBatch(request)
+      setBatchResult(result)
+    } catch (error) {
+      console.error('Error creating batch:', error)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -172,12 +213,32 @@ export default function CreatePage() {
                 </Button>
               </div>
 
-              <div className="flex min-h-[200px] items-center justify-center rounded-lg border-2 border-dashed border-blue-500/30 bg-gradient-to-br from-blue-600/10 to-blue-500/5 backdrop-blur-xl">
+              <div 
+                className="flex min-h-[200px] items-center justify-center rounded-lg border-2 border-dashed border-blue-500/30 bg-gradient-to-br from-blue-600/10 to-blue-500/5 backdrop-blur-xl cursor-pointer hover:border-blue-500/50 transition-colors"
+                onClick={() => document.getElementById('csv-upload')?.click()}
+              >
                 <div className="text-center">
-                  <Upload className="mx-auto h-12 w-12 text-blue-400" />
-                  <p className="mt-2 text-sm font-medium text-white">Drop CSV file here</p>
-                  <p className="text-xs text-gray-400">or click to browse</p>
+                  {selectedFile ? (
+                    <div>
+                      <CheckCircle2 className="mx-auto h-12 w-12 text-green-400" />
+                      <p className="mt-2 text-sm font-medium text-white">{selectedFile.name}</p>
+                      <p className="text-xs text-gray-400">Click to change file</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="mx-auto h-12 w-12 text-blue-400" />
+                      <p className="mt-2 text-sm font-medium text-white">Drop CSV file here</p>
+                      <p className="text-xs text-gray-400">or click to browse</p>
+                    </div>
+                  )}
                 </div>
+                <input
+                  id="csv-upload"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
               </div>
 
               <div className="rounded-lg border border-blue-500/30 bg-gradient-to-br from-blue-600/20 to-blue-500/10 p-4 backdrop-blur-xl">
@@ -191,11 +252,49 @@ export default function CreatePage() {
             </CardContent>
           </Card>
 
+          {batchResult && (
+            <Card className="relative overflow-hidden border-white/10 bg-gradient-to-br from-green-600/20 via-green-500/10 to-transparent backdrop-blur-xl">
+              <div className="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent" />
+              <CardHeader className="relative">
+                <CardTitle className="text-white">Batch Processing Result</CardTitle>
+              </CardHeader>
+              <CardContent className="relative space-y-2">
+                <p className="text-sm text-gray-300">
+                  <strong>Batch ID:</strong> {batchResult.batch_id}
+                </p>
+                <p className="text-sm text-gray-300">
+                  <strong>Status:</strong> {batchResult.processing_status}
+                </p>
+                <p className="text-sm text-gray-300">
+                  <strong>Message:</strong> {batchResult.message}
+                </p>
+                {batchResult.estimated_completion_time && (
+                  <p className="text-sm text-gray-300">
+                    <strong>ETA:</strong> {batchResult.estimated_completion_time}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="flex justify-end gap-3">
             <Button variant="outline" className="border-white/10 text-gray-300 hover:bg-white/5 bg-transparent">
               Cancel
             </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white">Upload & Validate</Button>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handleBatchSubmit}
+              disabled={!selectedFile || isProcessing}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Upload & Validate'
+              )}
+            </Button>
           </div>
         </TabsContent>
       </Tabs>

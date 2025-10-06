@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Download, Copy, Eye, Paperclip, RefreshCcw, ShieldAlert } from "lucide-react"
+import { Calendar, Download, Copy, Eye, Paperclip, RefreshCcw, ShieldAlert, FileSpreadsheet, FileText } from "lucide-react"
 import { PageHeader } from "@/components/demo/page-header"
 import { KpiCard } from "@/components/demo/kpi-card"
 import { AdvisoryBanner } from "@/components/demo/advisory-banner"
 import { cn } from "@/lib/utils"
+import { fetchLedgerReconData, type LedgerReconData, fetchVendorPayments } from "@/lib/agents-api"
+import { generateRBIAuditReport, type ReportOptions } from "@/lib/report-generator"
 
 type JournalStage = "REQUEST" | "CLEARING" | "SETTLEMENT" | "CANCELLATION"
 
@@ -105,16 +107,75 @@ export default function LedgerReconPage() {
   const [rail, setRail] = useState<string>("all")
   const [status, setStatus] = useState<string>("all")
   const [account, setAccount] = useState<string>("all")
+  const [ledgerData, setLedgerData] = useState<LedgerReconData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [generatingReport, setGeneratingReport] = useState<string | null>(null)
+
+  // Fetch ledger & recon data from ARL agent
+  useEffect(() => {
+    const loadLedgerData = async () => {
+      try {
+        setLoading(true)
+        const data = await fetchLedgerReconData()
+        setLedgerData(data)
+      } catch (error) {
+        console.error('Error loading ledger data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadLedgerData()
+    
+    // Refresh data every 60 seconds
+    const interval = setInterval(loadLedgerData, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleGenerateRBIReport = async (format: 'excel' | 'csv' | 'pdf') => {
+    setGeneratingReport(format)
+    try {
+      // Fetch vendor payment data for the report
+      const vendorData = await fetchVendorPayments()
+      if (vendorData?.invoices) {
+        const reportOptions: ReportOptions = {
+          format,
+          entityName: 'Arealis Gateway',
+          reportingPeriod: `Q${Math.ceil((new Date().getMonth() + 1) / 3)}-${new Date().getFullYear()}`,
+          includeFailedTransactions: true,
+          includeReversedTransactions: true
+        }
+        
+        await generateRBIAuditReport(vendorData.invoices, reportOptions)
+      }
+    } catch (error) {
+      console.error('Error generating RBI report:', error)
+    } finally {
+      setGeneratingReport(null)
+    }
+  }
 
   const filteredJournals = useMemo(() => {
-    return journals.filter((j) => {
+    const journalsToFilter = ledgerData?.journal_entries?.map(journal => ({
+      id: journal.entry_id,
+      trace: journal.entry_id, // Using entry_id as trace since transaction_id might not be available
+      stage: journal.status.toUpperCase() as JournalStage,
+      rail: "IMPS", // Default rail, could be extracted from journal data
+      account: "Ops-01", // Default account, could be extracted from journal data
+      merchant: journal.description || "Merchant", // Use description as merchant name
+      amount: `₹${journal.debit.toLocaleString()}`,
+      status: journal.status === 'matched' ? 'posted' as const : 'pending' as const,
+      createdAt: journal.date,
+    })) || journals
+
+    return journalsToFilter.filter((j) => {
       const matchQ = q ? [j.id, j.trace, j.merchant].some((v) => v.toLowerCase().includes(q.toLowerCase())) : true
       const matchRail = rail === "all" ? true : j.rail === rail
       const matchStatus = status === "all" ? true : j.status === status
       const matchAccount = account === "all" ? true : j.account === account
       return matchQ && matchRail && matchStatus && matchAccount
     })
-  }, [q, rail, status, account])
+  }, [q, rail, status, account, ledgerData])
 
   return (
     <div className="space-y-6">
@@ -124,19 +185,74 @@ export default function LedgerReconPage() {
         title="Ledger & Recon"
         description="Finance-grade truth with journals and reconciliation"
         actions={
-          <Button variant="outline" size="sm">
-            <Download className="h-3 w-3 mr-2" />
-            Export
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-2 border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+              onClick={() => handleGenerateRBIReport('excel')}
+              disabled={generatingReport === 'excel'}
+            >
+              {generatingReport === 'excel' ? (
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-green-400 border-t-transparent" />
+              ) : (
+                <FileSpreadsheet className="h-3 w-3" />
+              )}
+              {generatingReport === 'excel' ? 'Generating...' : 'Excel'}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-2 border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+              onClick={() => handleGenerateRBIReport('csv')}
+              disabled={generatingReport === 'csv'}
+            >
+              {generatingReport === 'csv' ? (
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
+              ) : (
+                <Download className="h-3 w-3" />
+              )}
+              {generatingReport === 'csv' ? 'Generating...' : 'CSV'}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+              onClick={() => handleGenerateRBIReport('pdf')}
+              disabled={generatingReport === 'pdf'}
+            >
+              {generatingReport === 'pdf' ? (
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-red-400 border-t-transparent" />
+              ) : (
+                <FileText className="h-3 w-3" />
+              )}
+              {generatingReport === 'pdf' ? 'Generating...' : 'PDF'}
+            </Button>
+          </div>
         }
       />
       {/* Add advisories banner under header */}
       <AdvisoryBanner className="mt-2" />
       {/* Refined KPI band */}
       <div className="grid gap-4 md:grid-cols-3">
-        <KpiCard label="Posted Today" value="1,204" delta="+3.2% vs 24h" trend="up" />
-        <KpiCard label="Exceptions" value="8" delta="Watchlist active" trend="down" />
-        <KpiCard label="Match Rate" value="92.4%" delta="+0.4% today" trend="up" />
+        <KpiCard 
+          label="Posted Today" 
+          value={loading ? "..." : (ledgerData?.reconciliation_metrics?.total_transactions?.toLocaleString() || "1,204")} 
+          delta="+3.2% vs 24h" 
+          trend="up" 
+        />
+        <KpiCard 
+          label="Exceptions" 
+          value={loading ? "..." : (ledgerData?.reconciliation_metrics?.exception_count?.toString() || "8")} 
+          delta="Watchlist active" 
+          trend="down" 
+        />
+        <KpiCard 
+          label="Match Rate" 
+          value={loading ? "..." : `${ledgerData?.reconciliation_metrics?.match_rate_percent?.toFixed(1) || '92.4'}%`} 
+          delta="+0.4% today" 
+          trend="up" 
+        />
       </div>
 
       {/* Filters */}
@@ -417,29 +533,31 @@ export default function LedgerReconPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {exceptions.map((e) => (
+                  {(ledgerData?.exception_logs || exceptions).map((e) => (
                     // Soft row hover
-                    <TableRow key={e.id} className="hover:bg-muted/40 transition-colors">
-                      <TableCell className="font-mono text-xs">{e.id}</TableCell>
-                      <TableCell className="font-mono text-xs">{e.trace}</TableCell>
+                    <TableRow key={e.exception_id || e.id} className="hover:bg-muted/40 transition-colors">
+                      <TableCell className="font-mono text-xs">{e.exception_id || e.id}</TableCell>
+                      <TableCell className="font-mono text-xs">{e.transaction_id || e.trace}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="bg-secondary text-secondary-foreground">
-                          {e.rail}
+                          {e.rail || "NEFT"}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant="outline"
                           className={
-                            e.missing
+                            (e.missing || e.severity === 'high')
                               ? "bg-destructive/15 text-destructive-foreground"
-                              : "bg-warning/15 text-warning-foreground"
+                              : (e.severity === 'medium')
+                              ? "bg-warning/15 text-warning-foreground"
+                              : "bg-muted/15 text-muted-foreground"
                           }
                         >
-                          {e.reason}
+                          {e.description || e.reason || e.type || "Unknown"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs">{e.createdAt}</TableCell>
+                      <TableCell className="text-xs">{e.created_at || e.createdAt}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline" title="Attach document">

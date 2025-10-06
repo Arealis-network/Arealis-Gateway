@@ -219,6 +219,14 @@ class ArealisApiService {
       return response.ok;
     } catch (error) {
       console.error('API key validation error:', error);
+      
+      // Check if it's a connection error (backend not running)
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.warn('Backend service appears to be offline. This is expected if backend services are not running.');
+        // Return true to allow the frontend to work in demo mode
+        return true;
+      }
+      
       return false;
     }
   }

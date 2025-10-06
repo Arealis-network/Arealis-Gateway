@@ -7,8 +7,35 @@ import LoanDisbursementsCard from "@/components/dashboard/loan-disbursements-car
 import FunnelStage from "@/components/dashboard/funnel-stage"
 import EventItem from "@/components/dashboard/event-item"
 import TaskItem from "@/components/dashboard/task-item"
+import { fetchOverviewMetrics, type OverviewMetrics } from "@/lib/agents-api"
+import { useEffect, useState } from "react"
 
 export default function OverviewPage() {
+  const [overviewData, setOverviewData] = useState<OverviewMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch overview metrics from ARL agent
+  useEffect(() => {
+    const loadOverviewData = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchOverviewMetrics();
+        setOverviewData(data);
+      } catch (error) {
+        console.error('Error loading overview data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOverviewData();
+    
+    // Refresh data every 30 seconds
+    const interval = setInterval(loadOverviewData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fallback data if API is not available
   const railMixData = [
     { name: "UPI", value: 45, color: "#3b82f6" },
     { name: "IMPS", value: 25, color: "#60a5fa" },
@@ -17,7 +44,7 @@ export default function OverviewPage() {
     { name: "NACH", value: 5, color: "#dbeafe" },
   ]
 
-  const slaBreachData = [
+  const slaBreachData = overviewData?.sla_breaches || [
     { time: "00:00", expiry: 2, rail: 1 },
     { time: "04:00", expiry: 1, rail: 2 },
     { time: "08:00", expiry: 3, rail: 1 },
@@ -26,7 +53,7 @@ export default function OverviewPage() {
     { time: "20:00", expiry: 1, rail: 1 },
   ]
 
-  const overdueTasksData = [
+  const overdueTasksData = overviewData?.overdue_tasks || [
     { category: "Approvals", count: 12 },
     { category: "Recon", count: 8 },
     { category: "Filings", count: 5 },
@@ -62,12 +89,33 @@ export default function OverviewPage() {
           <CardContent className="relative space-y-3">
             <div className="space-y-1">
               <div className="text-3xl font-bold text-white">
-                ₹8.4<span className="text-2xl text-gray-400">Cr</span>
+                {loading ? (
+                  <div className="animate-pulse bg-gray-700 h-8 w-24 rounded"></div>
+                ) : (
+                  <>
+                    {overviewData?.transaction_volume?.today_volume ? 
+                      `₹${(overviewData.transaction_volume.today_volume / 10000000).toFixed(1)}` : 
+                      '₹8.4'
+                    }<span className="text-2xl text-gray-400">Cr</span>
+                  </>
+                )}
               </div>
-              <div className="text-xs text-gray-400">2,847 transactions</div>
+              <div className="text-xs text-gray-400">
+                {loading ? (
+                  <div className="animate-pulse bg-gray-700 h-3 w-20 rounded"></div>
+                ) : (
+                  `${overviewData?.transaction_volume?.transaction_count?.toLocaleString() || '2,847'} transactions`
+                )}
+              </div>
               <div className="flex items-center gap-1 text-xs text-blue-400">
                 <TrendingUp className="h-3 w-3" />
-                <span>+18.2%</span>
+                <span>
+                  {loading ? (
+                    <div className="animate-pulse bg-gray-700 h-3 w-8 rounded"></div>
+                  ) : (
+                    `+${overviewData?.transaction_volume?.volume_change_percent?.toFixed(1) || '18.2'}%`
+                  )}
+                </span>
               </div>
             </div>
             {/* Hourly volume sparkline */}

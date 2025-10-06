@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertCircle, RefreshCw, FileText, XCircle, Download } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { PageHeader } from "@/components/demo/page-header"
+import { fetchInvestigationData, type InvestigationData } from "@/lib/agents-api"
+import { useEffect, useState } from "react"
 
 const investigations = [
   {
@@ -44,15 +46,49 @@ const investigations = [
 ]
 
 export default function InvestigationsPage() {
+  const [investigationData, setInvestigationData] = useState<InvestigationData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch investigation data from RCA agent
+  useEffect(() => {
+    const loadInvestigationData = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchInvestigationData();
+        setInvestigationData(data);
+      } catch (error) {
+        console.error('Error loading investigation data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadInvestigationData();
+    
+    // Refresh data every 30 seconds
+    const interval = setInterval(loadInvestigationData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get unique cause categories for badges
+  const causeCategories = investigationData?.active_investigations?.reduce((acc, inv) => {
+    const category = inv.primary_cause.toLowerCase().replace(/\s+/g, '_');
+    if (!acc.includes(category)) {
+      acc.push(category);
+    }
+    return acc;
+  }, [] as string[]) || ['approval_expired', 'rail_fail', 'recon_exception', 'acc_hold'];
+
   return (
     <div className="space-y-6">
       {/* Gradient PageHeader at the very top for a cohesive overview */}
       <PageHeader eyebrow="Operations" title="Investigations" description="Triage & fix what's blocking flow" />
       <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-background/60 supports-[backdrop-filter]:bg-background/40 backdrop-blur p-2 sticky top-2 z-10 bg-gradient-to-r from-sky-500/20 via-blue-500/15 to-cyan-500/20">
-        <Badge variant="outline">Approval expired</Badge>
-        <Badge variant="outline">Rail fail</Badge>
-        <Badge variant="outline">Recon exception</Badge>
-        <Badge variant="outline">ACC hold</Badge>
+        {causeCategories.map((category) => (
+          <Badge key={category} variant="outline">
+            {category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+          </Badge>
+        ))}
       </div>
       <Separator className="my-2" />
       <Card className="glass-card glass-primary border border-border bg-card/60 supports-[backdrop-filter]:bg-card/50 backdrop-blur bg-gradient-to-b from-sky-500/8 via-cyan-400/5 to-teal-400/8">
@@ -73,21 +109,21 @@ export default function InvestigationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {investigations.map((case_) => (
-                <TableRow key={case_.id} className="hover:bg-muted/40 transition-colors">
-                  <TableCell className="font-mono text-sm">{case_.id}</TableCell>
-                  <TableCell className="font-medium">{case_.amount}</TableCell>
+              {(investigationData?.active_investigations || investigations).map((case_) => (
+                <TableRow key={case_.investigation_id || case_.id} className="hover:bg-muted/40 transition-colors">
+                  <TableCell className="font-mono text-sm">{case_.investigation_id || case_.id}</TableCell>
+                  <TableCell className="font-medium">{case_.amount || "₹0"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <AlertCircle className="h-4 w-4 text-destructive" />
-                      <span>{case_.cause}</span>
+                      <span>{case_.primary_cause || case_.cause}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{case_.time}</TableCell>
-                  <TableCell>{case_.assignedTo}</TableCell>
+                  <TableCell>{case_.created_at || case_.timestamp || case_.time}</TableCell>
+                  <TableCell>{case_.assigned_to || case_.assignedTo}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="bg-secondary text-secondary-foreground">
-                      {case_.nextStep}
+                      {case_.next_step || case_.nextStep || "Investigate"}
                     </Badge>
                   </TableCell>
                   <TableCell>

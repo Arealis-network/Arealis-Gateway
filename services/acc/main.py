@@ -18,7 +18,7 @@ app = FastAPI(title="ACC Agent Service", version="1.1")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3002", "http://localhost:3003"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -590,14 +590,14 @@ def get_vendor_payments(db: Session = Depends(get_db), api_key: str = Depends(ve
                 }
             }
         
-        # Calculate KPIs - exclude FAIL transactions from total_paid
-        total_paid = sum(float(payment.amount) for payment in vendor_payments if payment.status == "PASS")
+        # Calculate KPIs - exclude FAIL/REJECTED transactions from total_paid
+        total_paid = sum(float(payment.amount) for payment in vendor_payments if payment.status in ["PASS", "APPROVED"])
         unique_vendors = len(set(payment.beneficiary for payment in vendor_payments))
-        pending_approvals = len([p for p in vendor_payments if p.status == "PENDING"])
+        pending_approvals = len([p for p in vendor_payments if p.status in ["PENDING", "PASS", "FAIL"]])
         
         # Calculate pass/fail breakdown for dynamic visualization
-        pass_count = len([p for p in vendor_payments if p.status == "PASS"])
-        fail_count = len([p for p in vendor_payments if p.status == "FAIL"])
+        pass_count = len([p for p in vendor_payments if p.status in ["PASS", "APPROVED"]])
+        fail_count = len([p for p in vendor_payments if p.status in ["FAIL", "REJECTED"]])
         total_transactions = len(vendor_payments)
         
         # Prepare chart data - include both PASS and FAIL transactions
@@ -621,7 +621,7 @@ def get_vendor_payments(db: Session = Depends(get_db), api_key: str = Depends(ve
         invoices = []
         for payment in vendor_payments:
             # Map status from ACC agent to display status
-            display_status = "Paid" if payment.status == "PASS" else "Failed" if payment.status == "FAIL" else "Pending"
+            display_status = "Paid" if payment.status in ["PASS", "APPROVED"] else "Failed" if payment.status in ["FAIL", "REJECTED"] else "Pending"
             
             # Get method from payment_files data
             method = transaction_method_map.get(payment.line_id, "NEFT")  # Default to NEFT if not found
@@ -848,6 +848,112 @@ def get_payroll_data(db: Session = Depends(get_db), api_key: str = Depends(verif
 def options_clear_vendor_data():
     """Handle CORS preflight for clear vendor data endpoint"""
     return {"message": "OK"}
+
+@app.put("/acc/approve-payment/{payment_id}")
+def approve_payment(payment_id: str, db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+    """Approve a payment transaction"""
+    try:
+        # Find all payment transactions with this line_id (there might be duplicates)
+        payments = db.query(AccAgent).filter(AccAgent.line_id == payment_id).all()
+        if not payments:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        
+        # Update status to approved for all matching payments
+        for payment in payments:
+            payment.status = "APPROVED"
+            payment.decision_reason = "Payment approved by user"
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Payment {payment_id} approved successfully",
+            "payment_id": payment_id,
+            "status": "APPROVED"
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "message": f"Error approving payment: {str(e)}"}
+
+@app.put("/acc/reject-payment/{payment_id}")
+def reject_payment(payment_id: str, reason: str = "Payment rejected by user", db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+    """Reject a payment transaction"""
+    try:
+        # Find all payment transactions with this line_id (there might be duplicates)
+        payments = db.query(AccAgent).filter(AccAgent.line_id == payment_id).all()
+        if not payments:
+            raise HTTPException(status_code=404, detail="Payment not found")
+        
+        # Update status to rejected for all matching payments
+        for payment in payments:
+            payment.status = "REJECTED"
+            payment.decision_reason = reason
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Payment {payment_id} rejected successfully",
+            "payment_id": payment_id,
+            "status": "REJECTED"
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "message": f"Error rejecting payment: {str(e)}"}
+
+@app.post("/acc/bulk-approve")
+def bulk_approve_payments(payment_ids: List[str], db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+    """Bulk approve multiple payment transactions"""
+    try:
+        approved_count = 0
+        failed_payments = []
+        
+        for payment_id in payment_ids:
+            payment = db.query(AccAgent).filter(AccAgent.line_id == payment_id).first()
+            if payment:
+                payment.status = "APPROVED"
+                payment.decision_reason = "Payment approved by user (bulk)"
+                approved_count += 1
+            else:
+                failed_payments.append(payment_id)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Bulk approval completed. {approved_count} payments approved.",
+            "approved_count": approved_count,
+            "failed_payments": failed_payments
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "message": f"Error in bulk approval: {str(e)}"}
+
+@app.post("/acc/bulk-reject")
+def bulk_reject_payments(payment_ids: List[str], reason: str = "Payments rejected by user (bulk)", db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+    """Bulk reject multiple payment transactions"""
+    try:
+        rejected_count = 0
+        failed_payments = []
+        
+        for payment_id in payment_ids:
+            payment = db.query(AccAgent).filter(AccAgent.line_id == payment_id).first()
+            if payment:
+                payment.status = "REJECTED"
+                payment.decision_reason = reason
+                rejected_count += 1
+            else:
+                failed_payments.append(payment_id)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Bulk rejection completed. {rejected_count} payments rejected.",
+            "rejected_count": rejected_count,
+            "failed_payments": failed_payments
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "message": f"Error in bulk rejection: {str(e)}"}
 
 @app.delete("/acc/clear-vendor-data")
 def clear_vendor_data(db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):

@@ -1,14 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer"
-import { FileDown, FileText, BookOpen, Share2 } from "lucide-react"
+import { FileDown, FileText, BookOpen, Share2, Loader2, Download, FileSpreadsheet } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
+import { fetchAuditFilingData, generateAuditPack, type AuditFilingData, fetchVendorPayments } from "@/lib/agents-api"
+import { generateRBIAuditReport, type ReportOptions } from "@/lib/report-generator"
 
 const filings = [
   { trace: "TRC-2024-001231", status: "Ready", bankFmt: "CSV", regulatorFmt: "PDF", utr: "UTR2024001230456" },
@@ -24,8 +26,80 @@ export default function AuditFilingsPage() {
   const [status, setStatus] = useState<"All" | "Ready" | "Pending" | "Failed">("All")
   const [page, setPage] = useState(1)
   const pageSize = 8
+  const [auditData, setAuditData] = useState<AuditFilingData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [generatingPack, setGeneratingPack] = useState<string | null>(null)
+  const [generatingReport, setGeneratingReport] = useState<string | null>(null)
 
-  const filtered = filings.filter((f) => {
+  // Fetch audit & filing data from CRRAK agent
+  useEffect(() => {
+    const loadAuditData = async () => {
+      try {
+        setLoading(true)
+        const data = await fetchAuditFilingData()
+        setAuditData(data)
+      } catch (error) {
+        console.error('Error loading audit data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadAuditData()
+    
+    // Refresh data every 60 seconds
+    const interval = setInterval(loadAuditData, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const handleGenerateAuditPack = async (batchId: string) => {
+    setGeneratingPack(batchId)
+    try {
+      const result = await generateAuditPack(batchId)
+      if (result.success) {
+        // Refresh data to show new pack
+        const data = await fetchAuditFilingData()
+        setAuditData(data)
+      }
+    } catch (error) {
+      console.error('Error generating audit pack:', error)
+    } finally {
+      setGeneratingPack(null)
+    }
+  }
+
+  const handleGenerateRBIReport = async (format: 'excel' | 'csv' | 'pdf') => {
+    setGeneratingReport(format)
+    try {
+      // Fetch vendor payment data for the report
+      const vendorData = await fetchVendorPayments()
+      if (vendorData?.invoices) {
+        const reportOptions: ReportOptions = {
+          format,
+          entityName: 'Arealis Gateway',
+          reportingPeriod: `Q${Math.ceil((new Date().getMonth() + 1) / 3)}-${new Date().getFullYear()}`,
+          includeFailedTransactions: true,
+          includeReversedTransactions: true
+        }
+        
+        await generateRBIAuditReport(vendorData.invoices, reportOptions)
+      }
+    } catch (error) {
+      console.error('Error generating RBI report:', error)
+    } finally {
+      setGeneratingReport(null)
+    }
+  }
+
+  const filtered = (auditData?.audit_packs?.map(pack => ({
+    trace: pack.batch_id,
+    status: pack.status === 'generated' ? 'Ready' : pack.status === 'reviewed' ? 'Ready' : pack.status === 'filed' ? 'Ready' : 'Pending',
+    bankFmt: "CSV",
+    regulatorFmt: "PDF",
+    utr: "—",
+    pack_id: pack.pack_id,
+    download_url: pack.download_url,
+  })) || filings).filter((f) => {
     const matchesQ = q.trim().length === 0 || f.trace.toLowerCase().includes(q.toLowerCase())
     const matchesStatus = status === "All" || f.status === status
     return matchesQ && matchesStatus
@@ -40,11 +114,54 @@ export default function AuditFilingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-balance">Audit & Filings (CRRAK)</h1>
-        <p className="text-sm text-muted-foreground text-pretty">
-          Explain & export: decision stories, bank files, and regulator packs
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">Audit & Filings (CRRAK)</h1>
+          <p className="text-sm text-muted-foreground text-pretty">
+            Explain & export: decision stories, bank files, and regulator packs
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2 border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
+            onClick={() => handleGenerateRBIReport('excel')}
+            disabled={generatingReport === 'excel'}
+          >
+            {generatingReport === 'excel' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            {generatingReport === 'excel' ? 'Generating...' : 'RBI Excel Report'}
+          </Button>
+          <Button 
+            variant="outline" 
+            className="gap-2 border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+            onClick={() => handleGenerateRBIReport('csv')}
+            disabled={generatingReport === 'csv'}
+          >
+            {generatingReport === 'csv' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {generatingReport === 'csv' ? 'Generating...' : 'RBI CSV Report'}
+          </Button>
+          <Button 
+            variant="outline" 
+            className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+            onClick={() => handleGenerateRBIReport('pdf')}
+            disabled={generatingReport === 'pdf'}
+          >
+            {generatingReport === 'pdf' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            {generatingReport === 'pdf' ? 'Generating...' : 'RBI PDF Report'}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -53,7 +170,9 @@ export default function AuditFilingsPage() {
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
           <CardContent className="relative p-4">
             <div className="text-sm font-medium text-gray-300">Packs Ready</div>
-            <div className="mt-1 text-2xl font-bold text-white">2</div>
+            <div className="mt-1 text-2xl font-bold text-white">
+              {loading ? "..." : (auditData?.compliance_metrics?.total_audit_packs?.toString() || "2")}
+            </div>
           </CardContent>
         </Card>
 
@@ -62,7 +181,9 @@ export default function AuditFilingsPage() {
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
           <CardContent className="relative p-4">
             <div className="text-sm font-medium text-gray-300">Pending</div>
-            <div className="mt-1 text-2xl font-bold text-white">1</div>
+            <div className="mt-1 text-2xl font-bold text-white">
+              {loading ? "..." : (auditData?.compliance_metrics?.pending_filings?.toString() || "1")}
+            </div>
           </CardContent>
         </Card>
 
@@ -72,7 +193,8 @@ export default function AuditFilingsPage() {
           <CardContent className="relative p-4">
             <div className="text-sm font-medium text-gray-300">Compliance</div>
             <div className="mt-1 text-2xl font-bold text-white">
-              100<span className="text-base font-medium text-gray-400">%</span>
+              {loading ? "..." : `${auditData?.compliance_metrics?.compliance_score || 100}`}
+              <span className="text-base font-medium text-gray-400">%</span>
             </div>
           </CardContent>
         </Card>
@@ -171,8 +293,19 @@ export default function AuditFilingsPage() {
                       className="rounded-md"
                       title="Download Audit Pack"
                       aria-label={`Download audit pack for ${f.trace}`}
+                      onClick={() => f.download_url ? window.open(f.download_url, '_blank') : handleGenerateAuditPack(f.trace)}
+                      disabled={generatingPack === f.trace}
                     >
-                      <FileDown className="mr-2 h-3 w-3" /> Download
+                      {generatingPack === f.trace ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" /> Generating...
+                        </>
+                      ) : (
+                        <>
+                          <FileDown className="mr-2 h-3 w-3" /> 
+                          {f.download_url ? 'Download' : 'Generate'}
+                        </>
+                      )}
                     </Button>
                   </TableCell>
                   <TableCell>

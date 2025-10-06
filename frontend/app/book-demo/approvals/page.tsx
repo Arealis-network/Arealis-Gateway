@@ -7,59 +7,51 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { Clock, CheckCircle, XCircle, Search, Filter, TrendingUp, AlertTriangle } from "lucide-react"
-import { useState } from "react"
-
-const approvals = [
-  {
-    id: "TRC-2024-001234",
-    amount: "₹25,000",
-    beneficiary: "Vendor Corp (****4567)",
-    urgency: "High",
-    deadline: "15m",
-    requestedBy: "John Smith",
-    status: "expiring",
-  },
-  {
-    id: "TRC-2024-001235",
-    amount: "₹50,000",
-    beneficiary: "Supplier Ltd (****8901)",
-    urgency: "Standard",
-    deadline: "2h 30m",
-    requestedBy: "Jane Doe",
-    status: "pending",
-  },
-  {
-    id: "TRC-2024-001236",
-    amount: "₹15,000",
-    beneficiary: "Contractor Inc (****2345)",
-    urgency: "High",
-    deadline: "8m",
-    requestedBy: "Bob Wilson",
-    status: "expiring",
-  },
-  {
-    id: "TRC-2024-001237",
-    amount: "₹75,000",
-    beneficiary: "Partner Co (****6789)",
-    urgency: "Standard",
-    deadline: "4h 15m",
-    requestedBy: "Alice Johnson",
-    status: "pending",
-  },
-  {
-    id: "TRC-2024-001238",
-    amount: "₹32,000",
-    beneficiary: "Service Provider (****3456)",
-    urgency: "High",
-    deadline: "22m",
-    requestedBy: "Mike Brown",
-    status: "pending",
-  },
-]
+import { useState, useEffect } from "react"
+import { fetchVendorPayments, approvePayment, rejectPayment, bulkApprovePayments, bulkRejectPayments } from "@/lib/agents-api"
 
 export default function ApprovalsPage() {
   const [filterUrgency, setFilterUrgency] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [vendorData, setVendorData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [selectedApprovals, setSelectedApprovals] = useState<Set<string>>(new Set())
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const loadVendorData = async () => {
+      try {
+        const data = await fetchVendorPayments()
+        setVendorData(data)
+      } catch (error) {
+        console.error('Error loading vendor data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadVendorData()
+  }, [])
+
+  // Convert vendor data to approvals format and deduplicate by invoice_id
+  const approvals = vendorData?.invoices?.reduce((acc: any[], invoice: any, index: number) => {
+    // Check if we already have this invoice_id
+    const existingIndex = acc.findIndex(item => item.id === invoice.invoice_id)
+    if (existingIndex === -1) {
+      // Add new approval with unique key
+      acc.push({
+        id: invoice.invoice_id,
+        uniqueKey: `${invoice.invoice_id}-${index}`, // Create unique key for React
+        amount: invoice.amount,
+        beneficiary: `${invoice.vendor} (****${invoice.invoice_id.slice(-4)})`,
+        urgency: invoice.amount > 50000 ? "High" : "Standard",
+        deadline: invoice.status === "Pending" ? "2h 30m" : "Completed",
+        requestedBy: invoice.vendor,
+        status: invoice.status || "Pending",
+      })
+    }
+    return acc
+  }, []) || []
 
   const filteredApprovals = approvals.filter((approval) => {
     const matchesUrgency = filterUrgency === "all" || approval.urgency.toLowerCase() === filterUrgency
@@ -69,27 +61,201 @@ export default function ApprovalsPage() {
     return matchesUrgency && matchesSearch
   })
 
+  // Handler functions for buttons
+  const handleSelectApproval = (approvalId: string) => {
+    const newSelected = new Set(selectedApprovals)
+    if (newSelected.has(approvalId)) {
+      newSelected.delete(approvalId)
+    } else {
+      newSelected.add(approvalId)
+    }
+    setSelectedApprovals(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedApprovals.size === filteredApprovals.length) {
+      setSelectedApprovals(new Set())
+    } else {
+      setSelectedApprovals(new Set(filteredApprovals.map(a => a.id)))
+    }
+  }
+
+  const handleApprove = async (approvalId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`approve-${approvalId}`))
+    try {
+      // Call the real API endpoint
+      const result = await approvePayment(approvalId)
+      
+      if (result.success) {
+        // Refresh data to get updated status from backend
+        const updatedData = await fetchVendorPayments()
+        setVendorData(updatedData)
+        
+        // Remove from selected if it was selected
+        setSelectedApprovals(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(approvalId)
+          return newSet
+        })
+        
+        console.log(`✅ ${result.message}`)
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error) {
+      console.error('❌ Error approving payment:', error)
+      alert(`Failed to approve payment ${approvalId}. Please try again.`)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(`approve-${approvalId}`)
+        return newSet
+      })
+    }
+  }
+
+  const handleReject = async (approvalId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`reject-${approvalId}`))
+    try {
+      // Call the real API endpoint
+      const result = await rejectPayment(approvalId)
+      
+      if (result.success) {
+        // Refresh data to get updated status from backend
+        const updatedData = await fetchVendorPayments()
+        setVendorData(updatedData)
+        
+        // Remove from selected if it was selected
+        setSelectedApprovals(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(approvalId)
+          return newSet
+        })
+        
+        console.log(`❌ ${result.message}`)
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error) {
+      console.error('❌ Error rejecting payment:', error)
+      alert(`Failed to reject payment ${approvalId}. Please try again.`)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(`reject-${approvalId}`)
+        return newSet
+      })
+    }
+  }
+
+  const handleBulkApprove = async () => {
+    if (selectedApprovals.size === 0) return
+    
+    setProcessingActions(prev => new Set(prev).add('bulk-approve'))
+    try {
+      // Call the real bulk approve API endpoint
+      const paymentIds = Array.from(selectedApprovals)
+      const result = await bulkApprovePayments(paymentIds)
+      
+      if (result.success) {
+        // Refresh data to get updated status from backend
+        const updatedData = await fetchVendorPayments()
+        setVendorData(updatedData)
+        
+        console.log(`✅ ${result.message}`)
+        setSelectedApprovals(new Set())
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error) {
+      console.error('❌ Error bulk approving:', error)
+      alert(`Failed to bulk approve payments. Please try again.`)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('bulk-approve')
+        return newSet
+      })
+    }
+  }
+
+  const handleBulkReject = async () => {
+    if (selectedApprovals.size === 0) return
+    
+    setProcessingActions(prev => new Set(prev).add('bulk-reject'))
+    try {
+      // Call the real bulk reject API endpoint
+      const paymentIds = Array.from(selectedApprovals)
+      const result = await bulkRejectPayments(paymentIds)
+      
+      if (result.success) {
+        // Refresh data to get updated status from backend
+        const updatedData = await fetchVendorPayments()
+        setVendorData(updatedData)
+        
+        console.log(`❌ ${result.message}`)
+        setSelectedApprovals(new Set())
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error) {
+      console.error('❌ Error bulk rejecting:', error)
+      alert(`Failed to bulk reject payments. Please try again.`)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('bulk-reject')
+        return newSet
+      })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Approvals</h1>
+            <p className="text-gray-400">Loading approvals data...</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-400">Loading...</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Approvals</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold">Approvals</h1>
           <p className="text-gray-400">Human-in-loop management with durable timers</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+            onClick={handleBulkReject}
+            disabled={selectedApprovals.size === 0 || processingActions.has('bulk-reject')}
+          >
             <XCircle className="h-4 w-4" />
-            Reject Selected
+            {processingActions.has('bulk-reject') ? 'Rejecting...' : `Reject Selected (${selectedApprovals.size})`}
           </Button>
-          <Button className="gap-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600">
+          <Button 
+            className="gap-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600"
+            onClick={handleBulkApprove}
+            disabled={selectedApprovals.size === 0 || processingActions.has('bulk-approve')}
+          >
             <CheckCircle className="h-4 w-4" />
-            Approve Selected
+            {processingActions.has('bulk-approve') ? 'Approving...' : `Approve Selected (${selectedApprovals.size})`}
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="relative overflow-hidden border-white/10 bg-gradient-to-br from-blue-600/20 via-blue-500/10 to-transparent backdrop-blur-xl">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
           <CardHeader className="relative pb-3">
@@ -188,15 +354,21 @@ export default function ApprovalsPage() {
           <p className="text-sm text-gray-400">{filteredApprovals.length} items requiring attention</p>
         </CardHeader>
         <CardContent>
-          <Table>
+          <div className="overflow-x-auto">
+            <Table>
             <TableHeader>
               <TableRow className="border-white/5 hover:bg-transparent">
                 <TableHead className="w-12">
-                  <Checkbox className="border-white/20" />
+                  <Checkbox 
+                    className="border-white/20" 
+                    checked={selectedApprovals.size === filteredApprovals.length && filteredApprovals.length > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
                 </TableHead>
                 <TableHead className="text-gray-400">Trace ID</TableHead>
                 <TableHead className="text-gray-400">Amount</TableHead>
                 <TableHead className="text-gray-400">Beneficiary</TableHead>
+                <TableHead className="text-gray-400">Status</TableHead>
                 <TableHead className="text-gray-400">Urgency</TableHead>
                 <TableHead className="text-gray-400">Deadline</TableHead>
                 <TableHead className="text-gray-400">Requested By</TableHead>
@@ -205,13 +377,33 @@ export default function ApprovalsPage() {
             </TableHeader>
             <TableBody>
               {filteredApprovals.map((approval) => (
-                <TableRow key={approval.id} className="border-white/5 transition-colors hover:bg-white/5">
+                <TableRow key={approval.uniqueKey} className="border-white/5 transition-colors hover:bg-white/5">
                   <TableCell>
-                    <Checkbox className="border-white/20" />
+                    <Checkbox 
+                      className="border-white/20" 
+                      checked={selectedApprovals.has(approval.id)}
+                      onCheckedChange={() => handleSelectApproval(approval.id)}
+                    />
                   </TableCell>
                   <TableCell className="font-mono text-sm text-blue-400">{approval.id}</TableCell>
                   <TableCell className="font-semibold text-white">{approval.amount}</TableCell>
                   <TableCell className="text-gray-300">{approval.beneficiary}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        approval.status === "Paid" || approval.status === "APPROVED"
+                          ? "border-green-500/30 bg-green-500/20 text-green-400"
+                          : approval.status === "Failed" || approval.status === "REJECTED"
+                          ? "border-red-500/30 bg-red-500/20 text-red-400"
+                          : "border-yellow-500/30 bg-yellow-500/20 text-yellow-400"
+                      }
+                    >
+                      {approval.status === "Paid" || approval.status === "APPROVED" ? "Approved" : 
+                       approval.status === "Failed" || approval.status === "REJECTED" ? "Rejected" : 
+                       approval.status === "Pending" || approval.status === "PENDING" ? "Pending" : "Pending"}
+                    </Badge>
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
@@ -240,26 +432,38 @@ export default function ApprovalsPage() {
                   </TableCell>
                   <TableCell className="text-gray-300">{approval.requestedBy}</TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-gradient-to-r from-green-600 to-green-500 text-white hover:from-green-700 hover:to-green-600"
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                      >
-                        Reject
-                      </Button>
-                    </div>
+                    {approval.status === "Pending" || approval.status === "PENDING" ? (
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          size="sm"
+                          className="bg-gradient-to-r from-green-600 to-green-500 text-white hover:from-green-700 hover:to-green-600"
+                          onClick={() => handleApprove(approval.id)}
+                          disabled={processingActions.has(`approve-${approval.id}`)}
+                        >
+                          {processingActions.has(`approve-${approval.id}`) ? 'Approving...' : 'Approve'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                          onClick={() => handleReject(approval.id)}
+                          disabled={processingActions.has(`reject-${approval.id}`)}
+                        >
+                          {processingActions.has(`reject-${approval.id}`) ? 'Rejecting...' : 'Reject'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">
+                        {approval.status === "Paid" || approval.status === "APPROVED" ? "✅ Approved" : 
+                         approval.status === "Failed" || approval.status === "REJECTED" ? "❌ Rejected" : "⏳ Pending"}
+                      </span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
