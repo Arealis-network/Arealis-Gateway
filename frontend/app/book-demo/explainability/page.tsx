@@ -37,30 +37,40 @@ export default function ExplainabilityPage() {
   const [queryHistory, setQueryHistory] = useState<QueryHistory[]>([])
   const [selectedResponse, setSelectedResponse] = useState<RCAResponse | null>(null)
   const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+
+  // Set client flag to prevent hydration mismatch
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // Load query history from localStorage on component mount
   useEffect(() => {
-    try {
-      const savedHistory = localStorage.getItem('rca_query_history')
-      if (savedHistory) {
-        const parsedHistory = JSON.parse(savedHistory)
-        // Ensure we have a valid array
-        if (Array.isArray(parsedHistory)) {
-          setQueryHistory(parsedHistory)
-          setHistoryLoaded(true)
-          console.log('📚 Loaded query history from localStorage:', parsedHistory.length, 'queries')
+    // Only run on client side to avoid hydration mismatch
+    if (typeof window !== 'undefined') {
+      try {
+        const savedHistory = localStorage.getItem('rca_query_history')
+        if (savedHistory) {
+          const parsedHistory = JSON.parse(savedHistory)
+          // Ensure we have a valid array
+          if (Array.isArray(parsedHistory)) {
+            setQueryHistory(parsedHistory)
+            setHistoryLoaded(true)
+            console.log('📚 Loaded query history from localStorage:', parsedHistory.length, 'queries')
+          }
         }
+      } catch (error) {
+        console.error('❌ Error loading query history from localStorage:', error)
+        // Clear corrupted data
+        localStorage.removeItem('rca_query_history')
       }
-    } catch (error) {
-      console.error('❌ Error loading query history from localStorage:', error)
-      // Clear corrupted data
-      localStorage.removeItem('rca_query_history')
     }
   }, [])
 
   // Save query history to localStorage whenever it changes
   useEffect(() => {
-    if (queryHistory.length > 0) {
+    // Only run on client side to avoid hydration mismatch
+    if (typeof window !== 'undefined' && queryHistory.length > 0) {
       try {
         localStorage.setItem('rca_query_history', JSON.stringify(queryHistory))
         console.log('💾 Saved query history to localStorage:', queryHistory.length, 'queries')
@@ -97,6 +107,7 @@ export default function ExplainabilityPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-API-Key': 'arealis_api_key_2024',
         },
         body: JSON.stringify({
           line_id: lineId,
@@ -125,8 +136,8 @@ export default function ExplainabilityPage() {
           : q
       ))
 
-      // Show the response
-      setSelectedResponse(rcaResult)
+      // Show the response (extract data from nested structure)
+      setSelectedResponse(rcaResult.data || rcaResult)
       
       // Clear the query input
       setQuery("")
@@ -159,7 +170,9 @@ export default function ExplainabilityPage() {
     if (confirm("Are you sure you want to clear all query history?")) {
       setQueryHistory([])
       setSelectedResponse(null)
-      localStorage.removeItem('rca_query_history')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('rca_query_history')
+      }
       console.log('🗑️ Cleared all query history')
     }
   }
@@ -171,6 +184,18 @@ export default function ExplainabilityPage() {
       // Keep only the last 50 queries to prevent localStorage bloat
       return updated.slice(0, 50)
     })
+  }
+
+  // Prevent hydration mismatch by only rendering on client
+  if (!isClient) {
+    return (
+      <div className="min-h-screen bg-[#0f0f0f] text-white flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -246,70 +271,151 @@ export default function ExplainabilityPage() {
               </CardContent>
             </Card>
 
-            {/* RCA Response Display */}
+            {/* RCA Analysis Report */}
             {selectedResponse && (
-              <Card className="bg-gray-900/50 border-gray-800 mt-6">
-                <CardHeader>
+              <Card className="bg-gray-900 border border-gray-700 mt-6 shadow-xl">
+                <CardHeader className="bg-gradient-to-r from-blue-900/30 to-indigo-900/30 border-b border-gray-700">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-white">
-                      <Brain className="w-5 h-5" />
-                      RCA Analysis Result
+                    <CardTitle className="flex items-center gap-3 text-white text-xl">
+                      <div className="p-2 bg-blue-600/20 rounded-lg">
+                        <Brain className="w-6 h-6 text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="font-semibold">Root Cause Analysis Report</div>
+                        <div className="text-sm font-normal text-gray-300">Transaction Analysis & Recommendations</div>
+                      </div>
                     </CardTitle>
                     <Button
                       size="sm"
                       variant="ghost"
                       onClick={() => setSelectedResponse(null)}
-                      className="text-gray-400 hover:text-white"
+                      className="text-gray-400 hover:text-white hover:bg-gray-700/50"
                     >
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-400">Line ID:</span>
-                      <span className="text-white ml-2">{selectedResponse.line_id}</span>
+                <CardContent className="space-y-6 p-6 bg-gray-800/50">
+                  {/* Report Header Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
+                        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Transaction Information</h3>
+                      </div>
+                      <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-center py-2 border-b border-gray-600">
+                          <span className="text-gray-400 font-medium">Transaction ID:</span>
+                          <span className="text-white font-mono bg-gray-700 px-2 py-1 rounded text-xs">
+                            {selectedResponse.line_id || 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-gray-600">
+                          <span className="text-gray-400 font-medium">Analysis Confidence:</span>
+                          <span className="text-green-400 font-semibold bg-green-900/30 px-2 py-1 rounded text-xs">
+                            {selectedResponse.confidence_score ? `${(selectedResponse.confidence_score * 100).toFixed(1)}%` : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-2">
+                          <span className="text-gray-400 font-medium">Report Generated:</span>
+                          <span className="text-white text-xs">
+                            {selectedResponse.timestamp ? new Date(selectedResponse.timestamp).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-gray-400">Batch ID:</span>
-                      <span className="text-white ml-2">{selectedResponse.batch_id}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">RCA ID:</span>
-                      <span className="text-white ml-2">{selectedResponse.rca_id}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Category:</span>
-                      <Badge variant="outline" className="ml-2 text-xs">
-                        {selectedResponse.failure_category}
-                      </Badge>
+                    
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-3 h-3 bg-purple-400 rounded-full"></div>
+                        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Analysis Context</h3>
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-400 font-medium block mb-2">Query:</span>
+                        <div className="bg-gray-700 border border-gray-600 rounded p-3">
+                          <span className="text-white italic">"{selectedResponse.query || 'N/A'}"</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-300 mb-2">Root Cause Analysis</h4>
-                    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
-                      <p className="text-white text-sm leading-relaxed">
-                        {selectedResponse.root_cause}
+                  {/* Executive Summary */}
+                  <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-red-600/20 rounded-lg">
+                        <Brain className="w-5 h-5 text-red-400" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-white">Executive Summary</h3>
+                    </div>
+                    <div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
+                      <p className="text-white leading-relaxed text-sm">
+                        {selectedResponse.analysis || 'No analysis available'}
                       </p>
                     </div>
                   </div>
 
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-300 mb-2">Recommended Actions</h4>
-                    <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
-                      <p className="text-white text-sm leading-relaxed whitespace-pre-line">
-                        {selectedResponse.recommended_action}
-                      </p>
+                  {/* Key Findings */}
+                  <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-blue-600/20 rounded-lg">
+                        <div className="w-5 h-5 text-blue-400">🔍</div>
+                      </div>
+                      <h3 className="text-lg font-semibold text-white">Key Findings</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {selectedResponse.findings && selectedResponse.findings.length > 0 ? (
+                        selectedResponse.findings.map((finding: string, index: number) => (
+                          <div key={index} className="flex items-start gap-3 p-4 bg-gray-700 border border-gray-600 rounded-lg">
+                            <div className="flex-shrink-0 w-6 h-6 bg-blue-600/20 rounded-full flex items-center justify-center">
+                              <span className="text-blue-400 text-xs font-bold">{index + 1}</span>
+                            </div>
+                            <p className="text-white text-sm leading-relaxed">{finding}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-4 bg-gray-700 border border-gray-600 rounded-lg">
+                          <p className="text-gray-400 italic text-sm">No findings available</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recommended Actions */}
+                  <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-sm">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 bg-green-600/20 rounded-lg">
+                        <div className="w-5 h-5 text-green-400">✅</div>
+                      </div>
+                      <h3 className="text-lg font-semibold text-white">Recommended Actions</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {selectedResponse.recommendations && selectedResponse.recommendations.length > 0 ? (
+                        selectedResponse.recommendations.map((recommendation: string, index: number) => (
+                          <div key={index} className="flex items-start gap-3 p-4 bg-gray-700 border border-gray-600 rounded-lg">
+                            <div className="flex-shrink-0 w-6 h-6 bg-green-600/20 rounded-full flex items-center justify-center">
+                              <span className="text-green-400 text-xs font-bold">{index + 1}</span>
+                            </div>
+                            <p className="text-white text-sm leading-relaxed">{recommendation}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-4 bg-gray-700 border border-gray-600 rounded-lg">
+                          <p className="text-gray-400 italic text-sm">No recommendations available</p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {selectedResponse.evidence_refs && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-300 mb-2">Evidence References</h4>
-                      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
-                        <pre className="text-white text-xs overflow-x-auto">
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 shadow-sm">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-yellow-600/20 rounded-lg">
+                          <div className="w-5 h-5 text-yellow-400">📋</div>
+                        </div>
+                        <h3 className="text-lg font-semibold text-white">Evidence References</h3>
+                      </div>
+                      <div className="bg-gray-700 border border-gray-600 rounded-lg p-4">
+                        <pre className="text-white text-xs overflow-x-auto font-mono">
                           {JSON.stringify(selectedResponse.evidence_refs, null, 2)}
                         </pre>
                       </div>

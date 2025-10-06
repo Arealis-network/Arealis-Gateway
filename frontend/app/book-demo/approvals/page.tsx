@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input"
 import { Clock, CheckCircle, XCircle, Search, Filter, TrendingUp, AlertTriangle, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
-import { fetchVendorPayments, approvePayment, rejectPayment, bulkApprovePayments, bulkRejectPayments } from "@/lib/agents-api"
+import { fetchVendorPayments, approvePayment, rejectPayment, bulkApprovePayments, bulkRejectPayments, clearAccData } from "@/lib/agents-api"
 
 export default function ApprovalsPage() {
   const [filterUrgency, setFilterUrgency] = useState<string>("all")
@@ -218,19 +218,29 @@ export default function ApprovalsPage() {
     setProcessingActions(prev => new Set(prev).add('clear-data'))
     
     try {
-      // Reset all data to initial state
-      setVendorData(null)
-      setSelectedApprovals(new Set())
-      setSearchQuery("")
-      setFilterUrgency("all")
+      // Call the backend API to clear data
+      const result = await clearAccData()
       
-      // Reload fresh data
-      const data = await fetchVendorPayments()
-      setVendorData(data)
-      
-      console.log("✅ Approval data cleared successfully")
+      if (result.success) {
+        // Reset all data to initial state
+        setVendorData(null)
+        setSelectedApprovals(new Set())
+        setSearchQuery("")
+        setFilterUrgency("all")
+        
+        // Reload fresh data
+        const data = await fetchVendorPayments()
+        setVendorData(data)
+        
+        console.log("✅ Approval data cleared successfully:", result.message)
+        alert(`Successfully cleared ${result.data?.deleted_count || 0} records`)
+      } else {
+        console.error("❌ Failed to clear data:", result.message)
+        alert(`Failed to clear data: ${result.message}`)
+      }
     } catch (error) {
       console.error("❌ Error clearing approval data:", error)
+      alert("Failed to clear data. Please try again.")
     } finally {
       setProcessingActions(prev => {
         const newSet = new Set(prev)

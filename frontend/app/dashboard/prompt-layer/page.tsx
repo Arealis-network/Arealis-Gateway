@@ -8,11 +8,11 @@ import { Send, Sparkles, PanelRightOpen } from "lucide-react"
 import { AgentDrawer } from "@/components/demo/agent-drawer"
 
 const quickQuestions = [
-  "Why was transaction ID 12345678 flagged?",
-  "What is the current model accuracy?",
-  "Summarize the risk profile for Loan ID L-789.",
+  "Why did transaction VEN001 fail?",
+  "What is the current system performance?",
   "Show me recent compliance violations.",
   "What's the average processing time today?",
+  "Analyze the root cause for payment delays.",
 ]
 
 export default function PromptLayerPage() {
@@ -20,7 +20,7 @@ export default function PromptLayerPage() {
     {
       role: "assistant",
       content:
-        "Hello! I'm your AI Explainability Assistant. I can help you understand decisions made by our loan disbursement system, analyze risk profiles, and provide insights into model performance. How can I assist you today?",
+        "Hello! I'm your AI Explainability Assistant. I can help you understand decisions made by our payment processing system, analyze transaction failures, and provide insights into compliance and performance issues. How can I assist you today?",
     },
   ])
   const [input, setInput] = useState("")
@@ -60,9 +60,9 @@ export default function PromptLayerPage() {
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
             <Sparkles className="h-8 w-8 text-emerald-500" />
-            Prompt Layer (AI Explainability Assistant)
+            Arealis Prompt Layer
           </h1>
-          <p className="text-slate-400 mt-1">Ask questions about transactions, models, and system decisions</p>
+          <p className="text-slate-400 mt-1">AI Explainability Assistant - Ask questions about transactions, compliance, and system decisions</p>
         </div>
         <Button
           onClick={() => setDrawerOpen(true)}

@@ -43,7 +43,7 @@ async def root():
 async def health():
     return {"status": "healthy", "service": "crrak"}
 
-@app.get("/crrak/audit-filings")
+@app.get("/audit-filings")
 async def get_audit_filings(api_key: str = Depends(verify_api_key)):
     """Get audit & filing data for CRRAK agent"""
     return {
@@ -75,6 +75,42 @@ async def get_audit_filings(api_key: str = Depends(verify_api_key)):
                     "status": "filed",
                     "download_url": "http://localhost:8004/crrak/download/AUDIT-003",
                     "created_at": "2024-01-15T10:30:00Z"
+                }
+            ]
+        }
+    }
+
+@app.get("/crrak/audit-filings")
+async def get_audit_filings_crrak(api_key: str = Depends(verify_api_key)):
+    """Get audit & filing data for CRRAK agent (CRRAK endpoint)"""
+    return {
+        "success": True,
+        "data": {
+            "compliance_metrics": {
+                "total_audit_packs": 12,
+                "pending_filings": 3,
+                "compliance_score": 98.5
+            },
+            "audit_packs": [
+                {
+                    "pack_id": "AUDIT-001",
+                    "batch_id": "B-2024-001",
+                    "status": "generated",
+                    "download_url": "http://localhost:8004/crrak/download/AUDIT-001",
+                    "trace": "TRC-2024-001236",
+                    "bankFmt": "CSV",
+                    "regulatorFmt": "PDF",
+                    "created_at": "2025-01-06T10:00:00Z"
+                },
+                {
+                    "pack_id": "AUDIT-002",
+                    "batch_id": "B-2024-002",
+                    "status": "pending",
+                    "download_url": "http://localhost:8004/crrak/download/AUDIT-002",
+                    "trace": "TRC-2024-001231",
+                    "bankFmt": "XML",
+                    "regulatorFmt": "TXT",
+                    "created_at": "2025-01-06T09:30:00Z"
                 }
             ]
         }
@@ -231,9 +267,9 @@ async def download_bank_format(trace_id: str, format_type: str = "CSV", api_key:
     try:
         # Generate bank format content based on format type
         if format_type.upper() == "CSV":
-            content = f"""Trace ID,Bank,Amount,Status,UTR,Date
-{trace_id},HDFC Bank,₹25,000,Processed,UTR2024001230456,2025-01-06
-{trace_id},ICICI Bank,₹15,000,Processed,UTR2024001230457,2025-01-06"""
+            content = f"""Line ID,Date,Status,Mode,UTR,Bank Ref No,Settlement Date
+{trace_id},06/01/2025,Success,Bulk Upload,UTR2024001230456,B-2024-001,06/01/2025
+{trace_id},06/01/2025,Success,Bulk Upload,UTR2024001230457,B-2024-002,06/01/2025"""
             filename = f"bank_format_{trace_id}.csv"
             content_type = "text/csv"
         elif format_type.upper() == "XML":

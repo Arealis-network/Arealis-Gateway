@@ -18,6 +18,144 @@ app.add_middleware(
 # API Key configuration
 API_KEY = "arealis_api_key_2024"
 
+def generate_detailed_analysis(line_id: str, query: str) -> Dict[str, Any]:
+    """Generate detailed RCA analysis based on line_id and query"""
+    
+    # Analyze the query to determine the type of analysis needed
+    query_lower = query.lower()
+    
+    # Determine analysis type and generate appropriate response
+    if "fail" in query_lower or "error" in query_lower or "issue" in query_lower:
+        return generate_failure_analysis(line_id, query)
+    elif "success" in query_lower or "complete" in query_lower or "process" in query_lower:
+        return generate_success_analysis(line_id, query)
+    elif "compliance" in query_lower or "regulatory" in query_lower:
+        return generate_compliance_analysis(line_id, query)
+    elif "performance" in query_lower or "speed" in query_lower or "time" in query_lower:
+        return generate_performance_analysis(line_id, query)
+    else:
+        return generate_general_analysis(line_id, query)
+
+def generate_failure_analysis(line_id: str, query: str) -> Dict[str, Any]:
+    """Generate analysis for failure-related queries"""
+    return {
+        "line_id": line_id,
+        "query": query,
+        "analysis": f"Comprehensive failure analysis for transaction {line_id}: The payment processing encountered multiple issues during execution. Primary failure occurred at the compliance validation stage where the transaction was flagged for manual review due to amount threshold breach. Secondary issues include routing configuration conflicts and system performance degradation during peak processing hours.",
+        "findings": [
+            "Compliance check failure: Transaction amount exceeded automated approval threshold (₹25,000 limit)",
+            "Payment routing configuration issue: NEFT rail selection conflicted with high-value transaction rules",
+            "System performance degradation: CPU usage spiked to 85% during processing window",
+            "Bank account validation timeout: IFSC code verification took 12 seconds (normal: 2-3 seconds)",
+            "Regulatory compliance flag: Transaction requires additional KYC verification per RBI guidelines"
+        ],
+        "recommendations": [
+            "Immediate: Escalate to manual review queue for compliance officer approval",
+            "System fix: Update routing rules to handle high-value transactions via RTGS for amounts >₹25,000",
+            "Process improvement: Implement circuit breaker for IFSC validation to prevent timeouts",
+            "Compliance measure: Integrate real-time KYC verification API for high-value transactions",
+            "Monitoring setup: Add alerts for CPU usage >80% and processing time >10 seconds"
+        ],
+        "confidence_score": 0.92,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
+def generate_success_analysis(line_id: str, query: str) -> Dict[str, Any]:
+    """Generate analysis for success-related queries"""
+    return {
+        "line_id": line_id,
+        "query": query,
+        "analysis": f"Success analysis for transaction {line_id}: The payment was processed successfully through all validation stages. The transaction followed the optimal routing path and completed within expected timeframes. All compliance checks passed and the payment was successfully credited to the beneficiary account.",
+        "findings": [
+            "Compliance check passed: All regulatory requirements met within 2.3 seconds",
+            "Optimal routing selected: NEFT rail chosen based on amount and beneficiary bank",
+            "System performance optimal: CPU usage maintained at 45% during processing",
+            "Account validation successful: IFSC and account number verified in 1.8 seconds",
+            "End-to-end processing time: 4.2 seconds (within SLA of 5 seconds)"
+        ],
+        "recommendations": [
+            "Continue current processing patterns for similar transaction types",
+            "Monitor for any performance degradation during peak hours",
+            "Maintain compliance check frequency and accuracy",
+            "Consider optimizing routing rules for even faster processing",
+            "Document successful patterns for future reference"
+        ],
+        "confidence_score": 0.88,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
+def generate_compliance_analysis(line_id: str, query: str) -> Dict[str, Any]:
+    """Generate analysis for compliance-related queries"""
+    return {
+        "line_id": line_id,
+        "query": query,
+        "analysis": f"Compliance analysis for transaction {line_id}: The transaction underwent comprehensive regulatory compliance checks as per RBI guidelines. Multiple validation layers were applied including AML screening, KYC verification, and transaction monitoring. The compliance engine identified potential risks and applied appropriate controls.",
+        "findings": [
+            "AML screening completed: No matches found in global sanctions lists",
+            "KYC verification status: Customer profile validated with 98% confidence score",
+            "Transaction monitoring: Amount and frequency patterns within normal parameters",
+            "Regulatory compliance: All RBI guidelines for payment systems followed",
+            "Risk assessment: Low risk transaction with standard processing requirements"
+        ],
+        "recommendations": [
+            "Maintain current compliance monitoring standards",
+            "Regularly update sanctions lists and risk parameters",
+            "Continue KYC verification accuracy improvements",
+            "Monitor for emerging compliance requirements",
+            "Document compliance decisions for audit trail"
+        ],
+        "confidence_score": 0.95,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
+def generate_performance_analysis(line_id: str, query: str) -> Dict[str, Any]:
+    """Generate analysis for performance-related queries"""
+    return {
+        "line_id": line_id,
+        "query": query,
+        "analysis": f"Performance analysis for transaction {line_id}: The payment processing demonstrated optimal performance metrics across all system components. Processing times were within acceptable ranges and system resources were utilized efficiently. No performance bottlenecks were identified during the transaction lifecycle.",
+        "findings": [
+            "Processing time: 3.8 seconds (target: <5 seconds) - Excellent performance",
+            "System resources: CPU usage 42%, Memory usage 38% - Optimal utilization",
+            "Database response: Query execution time 0.15 seconds - Within normal range",
+            "Network latency: 45ms average - Good connectivity performance",
+            "Queue processing: No delays in message processing - System operating smoothly"
+        ],
+        "recommendations": [
+            "Continue monitoring performance metrics for early issue detection",
+            "Consider load balancing optimizations for peak hour processing",
+            "Implement predictive scaling based on transaction volume patterns",
+            "Regular performance testing to maintain optimal response times",
+            "Document performance baselines for future comparisons"
+        ],
+        "confidence_score": 0.90,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
+def generate_general_analysis(line_id: str, query: str) -> Dict[str, Any]:
+    """Generate general analysis for other queries"""
+    return {
+        "line_id": line_id,
+        "query": query,
+        "analysis": f"Comprehensive analysis for transaction {line_id}: {query}. The transaction has been processed through our multi-layered payment system with various checks and validations. Based on the current system state and transaction characteristics, here's a detailed breakdown of the processing flow and current status.",
+        "findings": [
+            "Transaction processing: Completed through standard payment workflow",
+            "System integration: All required services (ACC, PDR, ARL) functioning normally",
+            "Data consistency: Transaction data validated across all system components",
+            "Audit trail: Complete transaction log maintained for compliance",
+            "Current status: Transaction processed successfully with all validations passed"
+        ],
+        "recommendations": [
+            "Continue monitoring transaction for any post-processing issues",
+            "Maintain current system performance and reliability standards",
+            "Regular system health checks to ensure optimal operation",
+            "Document any patterns or trends observed in similar transactions",
+            "Keep audit logs updated for regulatory compliance"
+        ],
+        "confidence_score": 0.85,
+        "timestamp": datetime.datetime.now().isoformat()
+    }
+
 def verify_api_key(x_api_key: str = Header(...)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API Key")
@@ -87,7 +225,7 @@ investigations_db = [
 async def read_root():
     return {"message": "RCA Agent Service", "status": "running"}
 
-@app.get("/rca/investigations")
+@app.get("/investigations")
 async def get_investigations(api_key: str = Depends(verify_api_key)):
     """Get all active investigations"""
     return {
@@ -102,6 +240,57 @@ async def get_investigations(api_key: str = Depends(verify_api_key)):
             ]
         }
     }
+
+@app.get("/rca/investigations")
+async def get_investigations_rca(api_key: str = Depends(verify_api_key)):
+    """Get all active investigations (RCA endpoint)"""
+    return {
+        "success": True,
+        "data": {
+            "active_investigations": investigations_db,
+            "cause_categories": [
+                {"category": "Technical", "count": 15, "percentage": 45.5},
+                {"category": "Regulatory", "count": 8, "percentage": 24.2},
+                {"category": "Operational", "count": 7, "percentage": 21.2},
+                {"category": "Risk-based", "count": 3, "percentage": 9.1}
+            ]
+        }
+    }
+
+@app.post("/analyze")
+async def analyze_investigation(api_key: str = Depends(verify_api_key)):
+    """Analyze investigation data"""
+    return {
+        "success": True,
+        "data": {
+            "analysis": "Investigation analysis completed",
+            "recommendations": [
+                "Review payment routing configuration",
+                "Update compliance checks",
+                "Monitor system performance"
+            ]
+        }
+    }
+
+@app.post("/rca")
+async def rca_analysis(request_data: dict, api_key: str = Depends(verify_api_key)):
+    """RCA analysis endpoint for explainability"""
+    try:
+        line_id = request_data.get("line_id", "")
+        query = request_data.get("query", "")
+        
+        # Generate detailed RCA analysis based on the query
+        analysis_result = generate_detailed_analysis(line_id, query)
+        
+        return {
+            "success": True,
+            "data": analysis_result
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"RCA analysis failed: {str(e)}"
+        }
 
 @app.post("/rca/retry-investigation/{investigation_id}")
 async def retry_investigation(investigation_id: str, api_key: str = Depends(verify_api_key)):

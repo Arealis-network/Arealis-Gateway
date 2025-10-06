@@ -1381,3 +1381,20 @@ def clear_loan_data(db: Session = Depends(get_db), api_key: str = Depends(verify
     except Exception as e:
         db.rollback()
         return {"success": False, "message": f"Error clearing loan disbursement data: {str(e)}"}
+
+@app.delete("/acc/clear-data")
+def clear_all_data(db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
+    """Clear all ACC agent data"""
+    try:
+        # Delete all AccAgent records
+        deleted_count = db.query(AccAgent).delete()
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Successfully cleared {deleted_count} records",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "message": f"Error clearing data: {str(e)}"}
