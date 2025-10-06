@@ -7,4 +7,7 @@ neo4j==5.15.0
 python-dotenv==1.0.0
 sqlalchemy==2.0.23
 gunicorn==21.2.0
---no-deps
+--index-url https://pypi.org/simple/
+--trusted-host pypi.org
+--trusted-host pypi.python.org
+--trusted-host files.pythonhosted.org
