@@ -5,7 +5,7 @@ setup(
     version="1.0.0",
     description="ACC Agent Service for Arealis Gateway",
     packages=find_packages(),
-    python_requires=">=3.11",
+    python_requires=">=3.10",
     install_requires=[
         "fastapi==0.104.1",
         "uvicorn==0.24.0",
