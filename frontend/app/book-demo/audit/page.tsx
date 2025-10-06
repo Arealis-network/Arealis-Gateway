@@ -6,10 +6,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer"
-import { FileDown, FileText, BookOpen, Share2, Loader2, Download, FileSpreadsheet } from "lucide-react"
+import { FileDown, FileText, BookOpen, Share2, Loader2, Download, FileSpreadsheet, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select"
-import { fetchAuditFilingData, generateAuditPack, type AuditFilingData, fetchVendorPayments } from "@/lib/agents-api"
+import { fetchAuditFilingData, generateAuditPack, type AuditFilingData, fetchVendorPayments, downloadBankFormat, downloadRegulatorFormat } from "@/lib/agents-api"
 import { generateRBIAuditReport, type ReportOptions } from "@/lib/report-generator"
 
 const filings = [
@@ -30,6 +30,7 @@ export default function AuditFilingsPage() {
   const [loading, setLoading] = useState(true)
   const [generatingPack, setGeneratingPack] = useState<string | null>(null)
   const [generatingReport, setGeneratingReport] = useState<string | null>(null)
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set())
 
   // Fetch audit & filing data from CRRAK agent
   useEffect(() => {
@@ -91,6 +92,104 @@ export default function AuditFilingsPage() {
     }
   }
 
+  // Action handler functions
+  const handleDownloadBankFormat = async (traceId: string, formatType: string) => {
+    setProcessingActions(prev => new Set(prev).add(`bank-${traceId}`));
+    try {
+      const result = await downloadBankFormat(traceId, formatType);
+      if (result.success) {
+        // Create and download the file
+        const blob = new Blob([result.data.content], { type: result.data.content_type });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.data.filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        console.log(`📥 Bank format ${formatType} downloaded for ${traceId}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error downloading bank format:', error);
+      alert(`Failed to download bank format. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`bank-${traceId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleDownloadRegulatorFormat = async (traceId: string, formatType: string) => {
+    setProcessingActions(prev => new Set(prev).add(`regulator-${traceId}`));
+    try {
+      const result = await downloadRegulatorFormat(traceId, formatType);
+      if (result.success) {
+        // Create and download the file
+        const blob = new Blob([result.data.content], { type: result.data.content_type });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.data.filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        console.log(`📥 Regulator format ${formatType} downloaded for ${traceId}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error downloading regulator format:', error);
+      alert(`Failed to download regulator format. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`regulator-${traceId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleClearData = async () => {
+    if (!confirm("Are you sure you want to clear all audit data? This action cannot be undone.")) {
+      return
+    }
+
+    setProcessingActions(prev => new Set(prev).add('clear-data'))
+    
+    try {
+      // Reset all data to initial state
+      setAuditData(null)
+      setVendorData(null)
+      setSearchQuery("")
+      setFilterStatus("all")
+      setFilterType("all")
+      
+      // Reload fresh data
+      const [auditResult, vendorResult] = await Promise.all([
+        fetchAuditFilingData(),
+        fetchVendorPayments()
+      ])
+      setAuditData(auditResult)
+      setVendorData(vendorResult)
+      
+      console.log("✅ Audit data cleared successfully")
+    } catch (error) {
+      console.error("❌ Error clearing audit data:", error)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('clear-data')
+        return newSet
+      })
+    }
+  };
+
   const filtered = (auditData?.audit_packs?.map(pack => ({
     trace: pack.batch_id,
     status: pack.status === 'generated' ? 'Ready' : pack.status === 'reviewed' ? 'Ready' : pack.status === 'filed' ? 'Ready' : 'Pending',
@@ -122,6 +221,15 @@ export default function AuditFilingsPage() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
+          <Button 
+            variant="outline"
+            className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+            onClick={handleClearData}
+            disabled={processingActions.has('clear-data')}
+          >
+            <Trash2 className="h-4 w-4" />
+            {processingActions.has('clear-data') ? 'Clearing...' : 'Clear Data'}
+          </Button>
           <Button 
             variant="outline" 
             className="gap-2 border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20"
@@ -315,8 +423,11 @@ export default function AuditFilingsPage() {
                       className="rounded-md border-border text-foreground hover:bg-secondary/30 bg-transparent"
                       title={`Bank ${f.bankFmt}`}
                       aria-label={`Download bank ${f.bankFmt} for ${f.trace}`}
+                      onClick={() => handleDownloadBankFormat(f.trace, f.bankFmt)}
+                      disabled={processingActions.has(`bank-${f.trace}`)}
                     >
-                      <FileText className="mr-2 h-3 w-3" /> {f.bankFmt}
+                      <FileText className={`mr-2 h-3 w-3 ${processingActions.has(`bank-${f.trace}`) ? 'animate-pulse' : ''}`} /> 
+                      {processingActions.has(`bank-${f.trace}`) ? 'Downloading...' : f.bankFmt}
                     </Button>
                   </TableCell>
                   <TableCell>
@@ -326,8 +437,11 @@ export default function AuditFilingsPage() {
                       className="rounded-md border-border text-foreground hover:bg-secondary/30 bg-transparent"
                       title={f.regulatorFmt}
                       aria-label={`Download regulator ${f.regulatorFmt} for ${f.trace}`}
+                      onClick={() => handleDownloadRegulatorFormat(f.trace, f.regulatorFmt)}
+                      disabled={processingActions.has(`regulator-${f.trace}`)}
                     >
-                      <BookOpen className="mr-2 h-3 w-3" /> {f.regulatorFmt}
+                      <BookOpen className={`mr-2 h-3 w-3 ${processingActions.has(`regulator-${f.trace}`) ? 'animate-pulse' : ''}`} /> 
+                      {processingActions.has(`regulator-${f.trace}`) ? 'Downloading...' : f.regulatorFmt}
                     </Button>
                   </TableCell>
                   <TableCell>

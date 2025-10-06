@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { RefreshCw, XCircle, Eye } from "lucide-react"
+import { RefreshCw, XCircle, Eye, Trash2 } from "lucide-react"
 import { PageHeader } from "@/components/demo/page-header"
 import { KpiCard } from "@/components/demo/kpi-card"
 import { Download } from "lucide-react"
 import { AdvisoryBanner } from "@/components/demo/advisory-banner"
-import { fetchLiveQueueData, type LiveQueueData } from "@/lib/agents-api"
+import { fetchLiveQueueData, type LiveQueueData, exportLiveQueueCSV, retryTransaction, cancelTransaction, getTransactionDetails } from "@/lib/agents-api"
 import { useEffect, useState } from "react"
 
 const pendingPayments = [
@@ -73,6 +73,9 @@ const dispatched = [
 export default function LiveQueuePage() {
   const [liveQueueData, setLiveQueueData] = useState<LiveQueueData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set());
+  const [transactionDetails, setTransactionDetails] = useState<any>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   // Fetch live queue data from PDR agent
   useEffect(() => {
@@ -95,6 +98,137 @@ export default function LiveQueuePage() {
     return () => clearInterval(interval);
   }, []);
 
+  // Action handler functions
+  const handleExportCSV = async () => {
+    setProcessingActions(prev => new Set(prev).add('export-csv'));
+    try {
+      const result = await exportLiveQueueCSV();
+      if (result.success) {
+        // Create and download the CSV file
+        const blob = new Blob([result.data.csv_content], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.data.filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        console.log(`📥 Live queue CSV exported successfully`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error exporting CSV:', error);
+      alert(`Failed to export CSV. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('export-csv');
+        return newSet;
+      });
+    }
+  };
+
+  const handleRetryTransaction = async (traceId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`retry-${traceId}`));
+    try {
+      const result = await retryTransaction(traceId);
+      if (result.success) {
+        // Refresh data to get updated status
+        const updatedData = await fetchLiveQueueData();
+        setLiveQueueData(updatedData);
+        console.log(`✅ ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error retrying transaction:', error);
+      alert(`Failed to retry transaction. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`retry-${traceId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleCancelTransaction = async (traceId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`cancel-${traceId}`));
+    try {
+      const result = await cancelTransaction(traceId);
+      if (result.success) {
+        // Refresh data to get updated status
+        const updatedData = await fetchLiveQueueData();
+        setLiveQueueData(updatedData);
+        console.log(`❌ ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error cancelling transaction:', error);
+      alert(`Failed to cancel transaction. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`cancel-${traceId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleViewDetails = async (traceId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`details-${traceId}`));
+    try {
+      const result = await getTransactionDetails(traceId);
+      if (result.success) {
+        setTransactionDetails(result.data);
+        setShowDetails(true);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error getting transaction details:', error);
+      alert(`Failed to get transaction details. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`details-${traceId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleClearData = async () => {
+    if (!confirm("Are you sure you want to clear all live queue data? This action cannot be undone.")) {
+      return
+    }
+
+    setProcessingActions(prev => new Set(prev).add('clear-data'))
+    
+    try {
+      // Reset all data to initial state
+      setLiveQueueData(null)
+      setTransactionDetails(null)
+      setShowDetails(false)
+      
+      // Reload fresh data
+      const data = await fetchLiveQueueData()
+      setLiveQueueData(data)
+      
+      console.log("✅ Live queue data cleared successfully")
+    } catch (error) {
+      console.error("❌ Error clearing live queue data:", error)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('clear-data')
+        return newSet
+      })
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -103,9 +237,24 @@ export default function LiveQueuePage() {
         description="Real-time routing & dispatch visibility"
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Download className="h-3 w-3 mr-2" />
-              Export CSV
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+              onClick={handleClearData}
+              disabled={processingActions.has('clear-data')}
+            >
+              <Trash2 className="h-3 w-3" />
+              {processingActions.has('clear-data') ? 'Clearing...' : 'Clear Data'}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={processingActions.has('export-csv')}
+            >
+              <Download className={`h-3 w-3 mr-2 ${processingActions.has('export-csv') ? 'animate-pulse' : ''}`} />
+              {processingActions.has('export-csv') ? 'Exporting...' : 'Export CSV'}
             </Button>
           </div>
         }
@@ -187,8 +336,13 @@ export default function LiveQueuePage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost">
-                          <Eye className="h-4 w-4" />
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleViewDetails(payment.trace)}
+                          disabled={processingActions.has(`details-${payment.trace}`)}
+                        >
+                          <Eye className={`h-4 w-4 ${processingActions.has(`details-${payment.trace}`) ? 'animate-pulse' : ''}`} />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -243,11 +397,21 @@ export default function LiveQueuePage() {
                       <TableCell>{payment.age}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="outline">
-                            <RefreshCw className="h-3 w-3" />
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleRetryTransaction(payment.trace)}
+                            disabled={processingActions.has(`retry-${payment.trace}`)}
+                          >
+                            <RefreshCw className={`h-3 w-3 ${processingActions.has(`retry-${payment.trace}`) ? 'animate-spin' : ''}`} />
                           </Button>
-                          <Button size="sm" variant="outline">
-                            <XCircle className="h-3 w-3" />
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleCancelTransaction(payment.trace)}
+                            disabled={processingActions.has(`cancel-${payment.trace}`)}
+                          >
+                            <XCircle className={`h-3 w-3 ${processingActions.has(`cancel-${payment.trace}`) ? 'animate-pulse' : ''}`} />
                           </Button>
                         </div>
                       </TableCell>
@@ -302,8 +466,13 @@ export default function LiveQueuePage() {
                       </TableCell>
                       <TableCell className="text-sm">{payment.time}</TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost">
-                          <Eye className="h-4 w-4" />
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={() => handleViewDetails(payment.trace)}
+                          disabled={processingActions.has(`details-${payment.trace}`)}
+                        >
+                          <Eye className={`h-4 w-4 ${processingActions.has(`details-${payment.trace}`) ? 'animate-pulse' : ''}`} />
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -314,6 +483,100 @@ export default function LiveQueuePage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Transaction Details Modal */}
+      {showDetails && transactionDetails && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background border rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Transaction Details</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowDetails(false)}
+              >
+                ✕
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Trace ID</label>
+                  <p className="text-sm">{transactionDetails.trace_id}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <p className="text-sm">{transactionDetails.status}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Amount</label>
+                  <p className="text-sm">{transactionDetails.amount}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Beneficiary</label>
+                  <p className="text-sm">{transactionDetails.beneficiary}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Initiated At</label>
+                  <p className="text-sm">{new Date(transactionDetails.initiated_at).toLocaleString()}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Processing Time</label>
+                  <p className="text-sm">{transactionDetails.processing_time}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Current Stage</label>
+                <p className="text-sm">{transactionDetails.current_stage}</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Processing Stages</label>
+                <div className="space-y-2 mt-2">
+                  {transactionDetails.stages?.map((stage: any, index: number) => (
+                    <div key={index} className="flex items-center gap-3 p-2 bg-muted/30 rounded">
+                      <div className={`w-2 h-2 rounded-full ${
+                        stage.status === 'completed' ? 'bg-green-500' :
+                        stage.status === 'in_progress' ? 'bg-blue-500' :
+                        'bg-gray-400'
+                      }`}></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{stage.stage}</p>
+                        {stage.timestamp && (
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(stage.timestamp).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="outline" className={
+                        stage.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                        stage.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }>
+                        {stage.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {transactionDetails.error_details && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Error Details</label>
+                  <p className="text-sm text-red-400">{transactionDetails.error_details}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Retry Count</label>
+                <p className="text-sm">{transactionDetails.retry_count}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

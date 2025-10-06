@@ -8,12 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Download, Copy, Eye, Paperclip, RefreshCcw, ShieldAlert, FileSpreadsheet, FileText } from "lucide-react"
+import { Calendar, Download, Copy, Eye, Paperclip, RefreshCcw, ShieldAlert, FileSpreadsheet, FileText, Trash2 } from "lucide-react"
 import { PageHeader } from "@/components/demo/page-header"
 import { KpiCard } from "@/components/demo/kpi-card"
 import { AdvisoryBanner } from "@/components/demo/advisory-banner"
 import { cn } from "@/lib/utils"
-import { fetchLedgerReconData, type LedgerReconData, fetchVendorPayments } from "@/lib/agents-api"
+import { fetchLedgerReconData, type LedgerReconData, fetchVendorPayments, downloadJournalCSV, rerunMatching, matchEntry, attachDocument, rematchEntry, raiseDispute } from "@/lib/agents-api"
 import { generateRBIAuditReport, type ReportOptions } from "@/lib/report-generator"
 
 type JournalStage = "REQUEST" | "CLEARING" | "SETTLEMENT" | "CANCELLATION"
@@ -110,6 +110,7 @@ export default function LedgerReconPage() {
   const [ledgerData, setLedgerData] = useState<LedgerReconData | null>(null)
   const [loading, setLoading] = useState(true)
   const [generatingReport, setGeneratingReport] = useState<string | null>(null)
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set())
 
   // Fetch ledger & recon data from ARL agent
   useEffect(() => {
@@ -155,6 +156,187 @@ export default function LedgerReconPage() {
     }
   }
 
+  // Action handler functions
+  const handleDownloadJournalCSV = async (journalId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`download-${journalId}`));
+    try {
+      const result = await downloadJournalCSV(journalId);
+      if (result.success) {
+        // Create and download the CSV file
+        const blob = new Blob([result.data.csv_content], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.data.filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        console.log(`📥 Journal CSV downloaded for ${journalId}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error downloading journal CSV:', error);
+      alert(`Failed to download journal CSV. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`download-${journalId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRerunMatching = async () => {
+    setProcessingActions(prev => new Set(prev).add('rerun-matching'));
+    try {
+      const result = await rerunMatching();
+      if (result.success) {
+        // Refresh data to get updated matching results
+        const updatedData = await fetchLedgerReconData();
+        setLedgerData(updatedData);
+        console.log(`✅ ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error re-running matching:', error);
+      alert(`Failed to re-run matching. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete('rerun-matching');
+        return newSet;
+      });
+    }
+  };
+
+  const handleMatchEntry = async (entryId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`match-${entryId}`));
+    try {
+      const result = await matchEntry(entryId);
+      if (result.success) {
+        // Refresh data to get updated matching results
+        const updatedData = await fetchLedgerReconData();
+        setLedgerData(updatedData);
+        console.log(`✅ ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error matching entry:', error);
+      alert(`Failed to match entry. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`match-${entryId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleAttachDocument = async (entryId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`attach-${entryId}`));
+    try {
+      const result = await attachDocument(entryId);
+      if (result.success) {
+        console.log(`📎 ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error attaching document:', error);
+      alert(`Failed to attach document. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`attach-${entryId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRematchEntry = async (entryId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`rematch-${entryId}`));
+    try {
+      const result = await rematchEntry(entryId);
+      if (result.success) {
+        // Refresh data to get updated matching results
+        const updatedData = await fetchLedgerReconData();
+        setLedgerData(updatedData);
+        console.log(`🔄 ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error re-matching entry:', error);
+      alert(`Failed to re-match entry. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`rematch-${entryId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRaiseDispute = async (entryId: string) => {
+    setProcessingActions(prev => new Set(prev).add(`dispute-${entryId}`));
+    try {
+      const result = await raiseDispute(entryId);
+      if (result.success) {
+        console.log(`⚠️ ${result.message}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error raising dispute:', error);
+      alert(`Failed to raise dispute. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`dispute-${entryId}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleClearData = async () => {
+    if (!confirm("Are you sure you want to clear all ledger data? This action cannot be undone.")) {
+      return
+    }
+
+    setProcessingActions(prev => new Set(prev).add('clear-data'))
+    
+    try {
+      // Reset all data to initial state
+      setLedgerData(null)
+      setVendorData(null)
+      setQ("")
+      setRail("all")
+      setStatus("all")
+      
+      // Reload fresh data
+      const [ledgerResult, vendorResult] = await Promise.all([
+        fetchLedgerReconData(),
+        fetchVendorPayments()
+      ])
+      setLedgerData(ledgerResult)
+      setVendorData(vendorResult)
+      
+      console.log("✅ Ledger data cleared successfully")
+    } catch (error) {
+      console.error("❌ Error clearing ledger data:", error)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('clear-data')
+        return newSet
+      })
+    }
+  };
+
   const filteredJournals = useMemo(() => {
     const journalsToFilter = ledgerData?.journal_entries?.map(journal => ({
       id: journal.entry_id,
@@ -186,6 +368,16 @@ export default function LedgerReconPage() {
         description="Finance-grade truth with journals and reconciliation"
         actions={
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+              onClick={handleClearData}
+              disabled={processingActions.has('clear-data')}
+            >
+              <Trash2 className="h-3 w-3" />
+              {processingActions.has('clear-data') ? 'Clearing...' : 'Clear Data'}
+            </Button>
             <Button 
               variant="outline" 
               size="sm"
@@ -381,13 +573,32 @@ export default function LedgerReconPage() {
                       <TableCell className="text-xs">{j.createdAt}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="outline" title="Download journal CSV">
-                            <Download className="h-3 w-3" />
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            title="Download journal CSV"
+                            onClick={() => handleDownloadJournalCSV(j.id)}
+                            disabled={processingActions.has(`download-${j.id}`)}
+                          >
+                            <Download className={`h-3 w-3 ${processingActions.has(`download-${j.id}`) ? 'animate-pulse' : ''}`} />
                           </Button>
-                          <Button size="sm" variant="outline" title="Copy journal ID">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            title="Copy journal ID"
+                            onClick={() => {
+                              navigator.clipboard.writeText(j.id);
+                              console.log(`📋 Journal ID ${j.id} copied to clipboard`);
+                            }}
+                          >
                             <Copy className="h-3 w-3" />
                           </Button>
-                          <Button size="sm" variant="outline" title="Open associated trace">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            title="Open associated trace"
+                            onClick={() => console.log(`🔍 Opening trace for journal ${j.id}`)}
+                          >
                             <Eye className="h-3 w-3" />
                           </Button>
                         </div>
@@ -415,9 +626,14 @@ export default function LedgerReconPage() {
               <div className="rounded-md border">
                 <div className="flex items-center justify-between border-b px-4 py-2">
                   <span className="text-sm text-slate-400">Unmatched items sample</span>
-                  <Button variant="outline" size="sm">
-                    <RefreshCcw className="mr-2 h-3 w-3" />
-                    Re-run matching
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleRerunMatching}
+                    disabled={processingActions.has('rerun-matching')}
+                  >
+                    <RefreshCcw className={`mr-2 h-3 w-3 ${processingActions.has('rerun-matching') ? 'animate-spin' : ''}`} />
+                    {processingActions.has('rerun-matching') ? 'Re-running...' : 'Re-run matching'}
                   </Button>
                 </div>
                 <Table>
@@ -452,8 +668,13 @@ export default function LedgerReconPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button size="sm" variant="outline">
-                            Match
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleMatchEntry(r.trace)}
+                            disabled={processingActions.has(`match-${r.trace}`)}
+                          >
+                            {processingActions.has(`match-${r.trace}`) ? 'Matching...' : 'Match'}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -560,14 +781,32 @@ export default function LedgerReconPage() {
                       <TableCell className="text-xs">{e.created_at || e.createdAt}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button size="sm" variant="outline" title="Attach document">
-                            <Paperclip className="h-3 w-3" />
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            title="Attach document"
+                            onClick={() => handleAttachDocument(e.trace)}
+                            disabled={processingActions.has(`attach-${e.trace}`)}
+                          >
+                            <Paperclip className={`h-3 w-3 ${processingActions.has(`attach-${e.trace}`) ? 'animate-pulse' : ''}`} />
                           </Button>
-                          <Button size="sm" variant="outline" title="Re-match">
-                            <RefreshCcw className="h-3 w-3" />
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            title="Re-match"
+                            onClick={() => handleRematchEntry(e.trace)}
+                            disabled={processingActions.has(`rematch-${e.trace}`)}
+                          >
+                            <RefreshCcw className={`h-3 w-3 ${processingActions.has(`rematch-${e.trace}`) ? 'animate-spin' : ''}`} />
                           </Button>
-                          <Button size="sm" variant="outline" title="Raise dispute">
-                            <ShieldAlert className="h-3 w-3" />
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            title="Raise dispute"
+                            onClick={() => handleRaiseDispute(e.trace)}
+                            disabled={processingActions.has(`dispute-${e.trace}`)}
+                          >
+                            <ShieldAlert className={`h-3 w-3 ${processingActions.has(`dispute-${e.trace}`) ? 'animate-pulse' : ''}`} />
                           </Button>
                         </div>
                       </TableCell>

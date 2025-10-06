@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Clock, CheckCircle, XCircle, Search, Filter, TrendingUp, AlertTriangle } from "lucide-react"
+import { Clock, CheckCircle, XCircle, Search, Filter, TrendingUp, AlertTriangle, Trash2 } from "lucide-react"
 import { useState, useEffect } from "react"
 import { fetchVendorPayments, approvePayment, rejectPayment, bulkApprovePayments, bulkRejectPayments } from "@/lib/agents-api"
 
@@ -210,6 +210,36 @@ export default function ApprovalsPage() {
     }
   }
 
+  const handleClearData = async () => {
+    if (!confirm("Are you sure you want to clear all approval data? This action cannot be undone.")) {
+      return
+    }
+
+    setProcessingActions(prev => new Set(prev).add('clear-data'))
+    
+    try {
+      // Reset all data to initial state
+      setVendorData(null)
+      setSelectedApprovals(new Set())
+      setSearchQuery("")
+      setFilterUrgency("all")
+      
+      // Reload fresh data
+      const data = await fetchVendorPayments()
+      setVendorData(data)
+      
+      console.log("✅ Approval data cleared successfully")
+    } catch (error) {
+      console.error("❌ Error clearing approval data:", error)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('clear-data')
+        return newSet
+      })
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -251,6 +281,15 @@ export default function ApprovalsPage() {
           >
             <CheckCircle className="h-4 w-4" />
             {processingActions.has('bulk-approve') ? 'Approving...' : `Approve Selected (${selectedApprovals.size})`}
+          </Button>
+          <Button 
+            variant="outline"
+            className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+            onClick={handleClearData}
+            disabled={processingActions.has('clear-data')}
+          >
+            <Trash2 className="h-4 w-4" />
+            {processingActions.has('clear-data') ? 'Clearing...' : 'Clear Data'}
           </Button>
         </div>
       </div>

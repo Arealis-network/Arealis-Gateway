@@ -3,6 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import {
   ChartContainer,
   ChartLegend,
@@ -11,8 +12,8 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart"
 import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis, LineChart } from "recharts"
-import { TriangleAlert } from "lucide-react"
-import { fetchRailHealthData, type RailHealthData } from "@/lib/agents-api"
+import { TriangleAlert, RefreshCw, Play, BarChart3, Trash2 } from "lucide-react"
+import { fetchRailHealthData, type RailHealthData, testRailConnection, restartRail, getRailMetrics } from "@/lib/agents-api"
 import { useEffect, useState } from "react"
 
 const successData = [
@@ -42,6 +43,9 @@ const penaltyTrend = [
 export default function RailHealthPage() {
   const [railHealthData, setRailHealthData] = useState<RailHealthData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [processingActions, setProcessingActions] = useState<Set<string>>(new Set())
+  const [railMetrics, setRailMetrics] = useState<any>(null)
+  const [showMetrics, setShowMetrics] = useState(false)
 
   // Fetch rail health data from PDR agent
   useEffect(() => {
@@ -64,6 +68,102 @@ export default function RailHealthPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Action handler functions
+  const handleTestRailConnection = async (railName: string) => {
+    setProcessingActions(prev => new Set(prev).add(`test-${railName}`));
+    try {
+      const result = await testRailConnection(railName);
+      if (result.success) {
+        console.log(`🔍 ${result.data.details}`);
+        alert(`Rail ${railName} connection test: ${result.data.connection_status}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error testing rail connection:', error);
+      alert(`Failed to test rail connection. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`test-${railName}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRestartRail = async (railName: string) => {
+    setProcessingActions(prev => new Set(prev).add(`restart-${railName}`));
+    try {
+      const result = await restartRail(railName);
+      if (result.success) {
+        console.log(`🔄 ${result.message}`);
+        alert(`Rail ${railName} restart initiated. Estimated completion: ${new Date(result.data.estimated_completion).toLocaleTimeString()}`);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error restarting rail:', error);
+      alert(`Failed to restart rail. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`restart-${railName}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleViewRailMetrics = async (railName: string) => {
+    setProcessingActions(prev => new Set(prev).add(`metrics-${railName}`));
+    try {
+      const result = await getRailMetrics(railName);
+      if (result.success) {
+        setRailMetrics(result.data);
+        setShowMetrics(true);
+      } else {
+        throw new Error(result.message);
+      }
+    } catch (error) {
+      console.error('❌ Error getting rail metrics:', error);
+      alert(`Failed to get rail metrics. Please try again.`);
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(`metrics-${railName}`);
+        return newSet;
+      });
+    }
+  };
+
+  const handleClearData = async () => {
+    if (!confirm("Are you sure you want to clear all rail health data? This action cannot be undone.")) {
+      return
+    }
+
+    setProcessingActions(prev => new Set(prev).add('clear-data'))
+    
+    try {
+      // Reset all data to initial state
+      setRailHealthData(null)
+      setRailMetrics(null)
+      setShowMetrics(false)
+      
+      // Reload fresh data
+      const data = await fetchRailHealthData()
+      setRailHealthData(data)
+      
+      console.log("✅ Rail health data cleared successfully")
+    } catch (error) {
+      console.error("❌ Error clearing rail health data:", error)
+    } finally {
+      setProcessingActions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete('clear-data')
+        return newSet
+      })
+    }
+  };
+
   // Get rail performance data for charts
   const getRailPerformanceData = () => {
     if (!railHealthData?.rail_performance) return successData
@@ -76,9 +176,20 @@ export default function RailHealthPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-balance">Rail Health</h1>
-        <p className="text-sm text-muted-foreground text-pretty">Routing intelligence & SRE view</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-balance">Rail Health</h1>
+          <p className="text-sm text-muted-foreground text-pretty">Routing intelligence & SRE view</p>
+        </div>
+        <Button 
+          variant="outline"
+          className="gap-2 border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+          onClick={handleClearData}
+          disabled={processingActions.has('clear-data')}
+        >
+          <Trash2 className="h-4 w-4" />
+          {processingActions.has('clear-data') ? 'Clearing...' : 'Clear Data'}
+        </Button>
       </div>
 
       {/* Advisory */}
@@ -278,8 +389,8 @@ export default function RailHealthPage() {
               { rail: "IMPS", cutoff: "No cut-off", tone: "success" },
             ]).map((c) => (
               <li key={c.rail} className="rounded-lg border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">{c.rail}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">{c.rail}</span>
                   <Badge
                     variant="outline"
                     className={
@@ -293,11 +404,108 @@ export default function RailHealthPage() {
                     {c.cutoff || c.time_remaining}
                   </Badge>
                 </div>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => handleTestRailConnection(c.rail)}
+                    disabled={processingActions.has(`test-${c.rail}`)}
+                    title="Test Connection"
+                  >
+                    <Play className={`h-3 w-3 ${processingActions.has(`test-${c.rail}`) ? 'animate-pulse' : ''}`} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => handleRestartRail(c.rail)}
+                    disabled={processingActions.has(`restart-${c.rail}`)}
+                    title="Restart Rail"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${processingActions.has(`restart-${c.rail}`) ? 'animate-spin' : ''}`} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => handleViewRailMetrics(c.rail)}
+                    disabled={processingActions.has(`metrics-${c.rail}`)}
+                    title="View Metrics"
+                  >
+                    <BarChart3 className={`h-3 w-3 ${processingActions.has(`metrics-${c.rail}`) ? 'animate-pulse' : ''}`} />
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
         </CardContent>
       </Card>
+
+      {/* Rail Metrics Modal */}
+      {showMetrics && railMetrics && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background border rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Rail Metrics - {railMetrics.rail_name}</h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setShowMetrics(false)}
+              >
+                ✕
+              </Button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Uptime</label>
+                  <p className="text-sm font-mono">{railMetrics.uptime_percentage}%</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Avg Response Time</label>
+                  <p className="text-sm font-mono">{railMetrics.avg_response_time}s</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Success Rate</label>
+                  <p className="text-sm font-mono">{railMetrics.success_rate}%</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Errors (24h)</label>
+                  <p className="text-sm font-mono">{railMetrics.error_count_24h}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Current Load</label>
+                  <p className="text-sm font-mono">{railMetrics.current_load}%</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Peak Load (24h)</label>
+                  <p className="text-sm font-mono">{railMetrics.peak_load_24h}%</p>
+                </div>
+              </div>
+
+              {railMetrics.last_error && railMetrics.last_error !== "None" && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Last Error</label>
+                  <p className="text-sm text-red-400">{railMetrics.last_error}</p>
+                  {railMetrics.last_error_time && (
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(railMetrics.last_error_time).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-4 border-t">
+                <p className="text-xs text-muted-foreground">
+                  Generated at: {new Date(railMetrics.generated_at).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -223,5 +223,170 @@ async def get_rail_health(api_key: str = Depends(verify_api_key)):
         }
     }
 
+@app.post("/pdr/export-csv")
+async def export_csv(api_key: str = Depends(verify_api_key)):
+    """Export live queue data as CSV"""
+    try:
+        # Generate CSV content for live queue data
+        csv_content = """Trace ID,Status,Amount,Beneficiary,Initiated At,Processing Time
+TRC-2024-001236,Processing,₹15,000,Vendor A,2025-01-06 10:30:00,2.5s
+TRC-2024-001231,Completed,₹25,000,Vendor B,2025-01-06 10:25:00,1.8s
+TRC-2024-001228,Processing,₹35,000,Vendor C,2025-01-06 10:20:00,3.2s
+TRC-2024-001220,Completed,₹100,000,Vendor D,2025-01-06 10:15:00,2.1s"""
+        
+        return {
+            "success": True,
+            "data": {
+                "csv_content": csv_content,
+                "filename": f"live_queue_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                "generated_at": datetime.now().isoformat()
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error exporting CSV: {str(e)}"}
+
+@app.post("/pdr/retry-transaction/{trace_id}")
+async def retry_transaction(trace_id: str, api_key: str = Depends(verify_api_key)):
+    """Retry a failed transaction"""
+    try:
+        return {
+            "success": True,
+            "message": f"Transaction {trace_id} retry initiated",
+            "data": {
+                "trace_id": trace_id,
+                "status": "retrying",
+                "retry_initiated_at": datetime.now().isoformat()
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error retrying transaction: {str(e)}"}
+
+@app.post("/pdr/cancel-transaction/{trace_id}")
+async def cancel_transaction(trace_id: str, reason: str = "Transaction cancelled by user", api_key: str = Depends(verify_api_key)):
+    """Cancel a transaction"""
+    try:
+        return {
+            "success": True,
+            "message": f"Transaction {trace_id} cancelled",
+            "data": {
+                "trace_id": trace_id,
+                "status": "cancelled",
+                "cancellation_reason": reason,
+                "cancelled_at": datetime.now().isoformat()
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error cancelling transaction: {str(e)}"}
+
+@app.get("/pdr/transaction-details/{trace_id}")
+async def get_transaction_details(trace_id: str, api_key: str = Depends(verify_api_key)):
+    """Get detailed information about a transaction"""
+    try:
+        # Generate detailed transaction information
+        transaction_details = {
+            "trace_id": trace_id,
+            "status": "Processing",
+            "amount": "₹15,000",
+            "beneficiary": "Vendor A",
+            "initiated_at": "2025-01-06T10:30:00Z",
+            "processing_time": "2.5s",
+            "current_stage": "Bank Processing",
+            "stages": [
+                {
+                    "stage": "Initiated",
+                    "timestamp": "2025-01-06T10:30:00Z",
+                    "status": "completed"
+                },
+                {
+                    "stage": "Validation",
+                    "timestamp": "2025-01-06T10:30:01Z",
+                    "status": "completed"
+                },
+                {
+                    "stage": "Bank Processing",
+                    "timestamp": "2025-01-06T10:30:02Z",
+                    "status": "in_progress"
+                },
+                {
+                    "stage": "Settlement",
+                    "timestamp": None,
+                    "status": "pending"
+                }
+            ],
+            "error_details": None,
+            "retry_count": 0
+        }
+        
+        return {
+            "success": True,
+            "data": transaction_details
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error getting transaction details: {str(e)}"}
+
+@app.post("/pdr/test-rail-connection/{rail_name}")
+async def test_rail_connection(rail_name: str, api_key: str = Depends(verify_api_key)):
+    """Test connection to a specific rail"""
+    try:
+        # Simulate rail connection test
+        import random
+        success = random.choice([True, True, True, False])  # 75% success rate
+        
+        return {
+            "success": True,
+            "data": {
+                "rail_name": rail_name,
+                "connection_status": "connected" if success else "failed",
+                "response_time": round(random.uniform(0.5, 2.0), 2),
+                "tested_at": datetime.now().isoformat(),
+                "details": f"Rail {rail_name} connection test {'passed' if success else 'failed'}"
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error testing rail connection: {str(e)}"}
+
+@app.post("/pdr/restart-rail/{rail_name}")
+async def restart_rail(rail_name: str, api_key: str = Depends(verify_api_key)):
+    """Restart a specific rail"""
+    try:
+        return {
+            "success": True,
+            "message": f"Rail {rail_name} restart initiated",
+            "data": {
+                "rail_name": rail_name,
+                "status": "restarting",
+                "restart_initiated_at": datetime.now().isoformat(),
+                "estimated_completion": (datetime.now() + timedelta(minutes=2)).isoformat()
+            }
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error restarting rail: {str(e)}"}
+
+@app.get("/pdr/rail-metrics/{rail_name}")
+async def get_rail_metrics(rail_name: str, api_key: str = Depends(verify_api_key)):
+    """Get detailed metrics for a specific rail"""
+    try:
+        import random
+        
+        metrics = {
+            "rail_name": rail_name,
+            "uptime_percentage": round(random.uniform(95, 99.9), 2),
+            "avg_response_time": round(random.uniform(0.8, 1.5), 2),
+            "success_rate": round(random.uniform(96, 99), 2),
+            "error_count_24h": random.randint(0, 5),
+            "last_error": "None" if random.choice([True, True, True, False]) else "Connection timeout",
+            "last_error_time": None if random.choice([True, True, True, False]) else (datetime.now() - timedelta(hours=random.randint(1, 12))).isoformat(),
+            "current_load": round(random.uniform(60, 95), 1),
+            "peak_load_24h": round(random.uniform(85, 99), 1),
+            "generated_at": datetime.now().isoformat()
+        }
+        
+        return {
+            "success": True,
+            "data": metrics
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Error getting rail metrics: {str(e)}"}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8002)
