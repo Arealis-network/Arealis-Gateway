@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple startup script for ACC service - Render optimized
+Gunicorn startup script for ACC service - Render optimized
 """
 
 import os
@@ -10,27 +10,37 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def main():
-    """Main startup function"""
-    print("🚀 Starting ACC Agent Service...")
+    """Main startup function using Gunicorn"""
+    print("🚀 Starting ACC Agent Service with Gunicorn...")
     
     # Get port from environment variable (Render requirement)
     port = int(os.getenv("PORT", 10000))
     print(f"🌐 Binding to host 0.0.0.0 on port {port} (Render requirement)")
     
     try:
-        # Import and run the FastAPI app directly
+        # Import the FastAPI app
         from main import app
-        import uvicorn
-        
         print(f"✅ FastAPI app imported successfully")
-        print(f"🔗 Starting server on http://0.0.0.0:{port}")
         
-        uvicorn.run(
-            app,
-            host="0.0.0.0",  # Required by Render
-            port=port,       # From PORT environment variable
-            log_level="info"
-        )
+        # Start with Gunicorn
+        import gunicorn.app.wsgiapp as wsgi
+        
+        # Set Gunicorn configuration
+        sys.argv = [
+            'gunicorn',
+            '--bind', f'0.0.0.0:{port}',
+            '--workers', '1',
+            '--worker-class', 'uvicorn.workers.UvicornWorker',
+            '--timeout', '120',
+            '--keep-alive', '2',
+            '--max-requests', '1000',
+            '--max-requests-jitter', '100',
+            'main:app'
+        ]
+        
+        print(f"🔗 Starting Gunicorn server on http://0.0.0.0:{port}")
+        wsgi.run()
+        
     except ImportError as e:
         print(f"❌ Import error: {e}")
         print("Installing missing dependencies...")

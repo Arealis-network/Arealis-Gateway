@@ -52,13 +52,15 @@ def main():
         from main import app
         import uvicorn
         
+        # Get port from environment variable (Render requirement)
         port = int(os.getenv("PORT", 10000))
-        print(f"Starting server on port {port}")
+        print(f"🌐 Binding to host 0.0.0.0 on port {port} (Render requirement)")
+        print(f"🔗 Starting server on http://0.0.0.0:{port}")
         
         uvicorn.run(
-            "main:app",
-            host="0.0.0.0",
-            port=port,
+            app,  # Use app directly instead of "main:app"
+            host="0.0.0.0",  # Required by Render
+            port=port,       # From PORT environment variable
             log_level="info"
         )
     except Exception as e:
