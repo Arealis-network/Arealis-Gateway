@@ -119,3 +119,4 @@ temp/
 !vercel.json
 !next.config.mjs
 !postcss.config.mjs
+.env
