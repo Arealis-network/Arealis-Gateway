@@ -7,13 +7,13 @@ from datetime import datetime
 import json
 
 # Database configurations
-POSTGRES_URL = "postgresql://postgres:NmxNfLIKzWQzxwrmQUiKCouDXhcScjcD@switchyard.proxy.rlwy.net:25675/railway"
+POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://postgres:NmxNfLIKzWQzxwrmQUiKCouDXhcScjcD@switchyard.proxy.rlwy.net:25675/railway")
 
 # Neo4j credentials
-NEO4J_URI = "neo4j+s://6933b562.databases.neo4j.io"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "Yavi0NJTNDApnMb-InD3pCVwdgT7Hzd2-6vb-tYshZo"
-NEO4J_DATABASE = "neo4j"
+NEO4J_URI = os.getenv("NEO4J_URI", "neo4j+s://6933b562.databases.neo4j.io")
+NEO4J_USER = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "Yavi0NJTNDApnMb-InD3pCVwdgT7Hzd2-6vb-tYshZo")
+NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 
 # PostgreSQL setup
 engine = create_engine(POSTGRES_URL)
