@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: arealis-acc-service
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://postgres:NmxNfLIKzWQzxwrmQUiKCouDXhcScjcD@switchyard.proxy.rlwy.net:25675/railway
+      - key: NEO4J_URI
+        value: neo4j+s://6933b562.databases.neo4j.io
+      - key: NEO4J_USERNAME
+        value: neo4j
+      - key: NEO4J_PASSWORD
+        value: Yavi0NJTNDApnMb-InD3pCVwdgT7Hzd2-6vb-tYshZo
+      - key: NEO4J_DATABASE
+        value: neo4j
+      - key: PORT
+        value: 10000
