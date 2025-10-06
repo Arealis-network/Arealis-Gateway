@@ -116,5 +116,6 @@ temp/
 !package-lock.json
 !tsconfig.json
 !components.json
+!vercel.json
 !next.config.mjs
 !postcss.config.mjs
