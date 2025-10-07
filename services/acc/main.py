@@ -44,6 +44,10 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
 @app.on_event("startup")
 async def startup_event():
     create_tables()
+
+@app.get("/")
+async def root():
+    return {"message": "ACC Agent Service", "status": "running", "version": "1.1"}
  
  
 # -------------------------

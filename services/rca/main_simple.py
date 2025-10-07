@@ -15,6 +15,88 @@ app.add_middleware(
     allow_headers=["*"], # Allows all headers
 )
 
+@app.get("/")
+async def root():
+    return {"message": "RCA Agent Service", "status": "running", "version": "1.0"}
+
+@app.get("/rca/investigations")
+async def get_investigations():
+    """Get list of active investigations"""
+    return {
+        "data": {
+            "active_investigations": [
+                {
+                    "id": "INV-001",
+                    "line_id": "L-1",
+                    "status": "in_progress",
+                    "priority": "high",
+                    "created_at": "2024-01-15T10:30:00Z",
+                    "assigned_to": "RCA-Agent-1"
+                },
+                {
+                    "id": "INV-002", 
+                    "line_id": "L-2",
+                    "status": "pending",
+                    "priority": "medium",
+                    "created_at": "2024-01-15T11:15:00Z",
+                    "assigned_to": "RCA-Agent-2"
+                }
+            ]
+        }
+    }
+
+@app.post("/rca/analyze")
+async def analyze_transaction(request: dict):
+    """Analyze a transaction for root cause"""
+    line_id = request.get("line_id", "L-1")
+    query = request.get("query", "Analyze this transaction")
+    
+    analysis = generate_detailed_analysis(line_id, query)
+    return {"data": analysis}
+
+@app.post("/rca/retry-investigation/{investigation_id}")
+async def retry_investigation(investigation_id: str):
+    """Retry a failed investigation"""
+    return {
+        "success": True,
+        "message": f"Investigation {investigation_id} retry initiated",
+        "investigation_id": investigation_id
+    }
+
+@app.post("/rca/cancel-investigation/{investigation_id}")
+async def cancel_investigation(investigation_id: str, reason: str = "Cancelled by user"):
+    """Cancel an investigation"""
+    return {
+        "success": True,
+        "message": f"Investigation {investigation_id} cancelled",
+        "reason": reason
+    }
+
+@app.get("/rca/decision-story/{investigation_id}")
+async def get_decision_story(investigation_id: str):
+    """Get decision story for an investigation"""
+    return {
+        "data": {
+            "investigation_id": investigation_id,
+            "decision_story": "Complete decision flow and reasoning for this investigation",
+            "steps": [
+                "Initial analysis completed",
+                "Compliance check passed",
+                "Risk assessment completed",
+                "Final decision approved"
+            ]
+        }
+    }
+
+@app.get("/rca/download-audit-pack/{investigation_id}")
+async def download_audit_pack(investigation_id: str):
+    """Download audit pack for an investigation"""
+    return {
+        "success": True,
+        "message": f"Audit pack for investigation {investigation_id} ready for download",
+        "download_url": f"/rca/audit-packs/{investigation_id}.pdf"
+    }
+
 # API Key configuration
 API_KEY = "arealis_api_key_2024"
 
