@@ -1,0 +1,39 @@
+{
+  "name": "arealis-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Arealis Gateway - Financial compliance and payment processing platform",
+  "workspaces": [
+    "frontend",
+    "client_portal"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=frontend",
+    "dev:client": "npm run dev --workspace=client_portal",
+    "build": "npm run build --workspace=frontend",
+    "build:client": "npm run build --workspace=client_portal",
+    "build:all": "npm run build --workspaces",
+    "start": "npm run start --workspace=frontend",
+    "start:client": "npm run start --workspace=client_portal",
+    "lint": "npm run lint --workspaces",
+    "install:all": "npm install --workspaces"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/arealis-gateway.git"
+  },
+  "keywords": [
+    "fintech",
+    "compliance",
+    "payments",
+    "gateway",
+    "nextjs",
+    "fastapi"
+  ],
+  "author": "Arealis Team",
+  "license": "MIT"
+}
