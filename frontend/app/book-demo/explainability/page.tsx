@@ -103,7 +103,7 @@ export default function ExplainabilityPage() {
     try {
       console.log(`🔍 Sending RCA request for Line ID: ${lineId}, Query: ${query}`)
       
-      const response = await fetch('http://localhost:8001/rca', {
+      const response = await fetch('http://localhost:8004/rca/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
