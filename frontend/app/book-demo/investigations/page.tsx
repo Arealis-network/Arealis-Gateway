@@ -207,9 +207,11 @@ export default function InvestigationsPage() {
 
   // Get unique cause categories for badges
   const causeCategories = investigationData?.active_investigations?.reduce((acc, inv) => {
-    const category = inv.primary_cause.toLowerCase().replace(/\s+/g, '_');
-    if (!acc.includes(category)) {
-      acc.push(category);
+    if (inv.primary_cause) {
+      const category = inv.primary_cause.toLowerCase().replace(/\s+/g, '_');
+      if (!acc.includes(category)) {
+        acc.push(category);
+      }
     }
     return acc;
   }, [] as string[]) || ['approval_expired', 'rail_fail', 'recon_exception', 'acc_hold'];

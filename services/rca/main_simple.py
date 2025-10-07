@@ -31,7 +31,11 @@ async def get_investigations():
                     "status": "in_progress",
                     "priority": "high",
                     "created_at": "2024-01-15T10:30:00Z",
-                    "assigned_to": "RCA-Agent-1"
+                    "assigned_to": "RCA-Agent-1",
+                    "primary_cause": "Payment Routing Failure",
+                    "description": "Transaction failed due to incorrect routing configuration",
+                    "estimated_resolution": "2024-01-15T14:30:00Z",
+                    "severity": "high"
                 },
                 {
                     "id": "INV-002", 
@@ -39,7 +43,23 @@ async def get_investigations():
                     "status": "pending",
                     "priority": "medium",
                     "created_at": "2024-01-15T11:15:00Z",
-                    "assigned_to": "RCA-Agent-2"
+                    "assigned_to": "RCA-Agent-2",
+                    "primary_cause": "Compliance Check",
+                    "description": "Transaction flagged for manual review due to amount threshold",
+                    "estimated_resolution": "2024-01-15T16:00:00Z",
+                    "severity": "medium"
+                },
+                {
+                    "id": "INV-003",
+                    "line_id": "L-3", 
+                    "status": "completed",
+                    "priority": "low",
+                    "created_at": "2024-01-15T09:00:00Z",
+                    "assigned_to": "RCA-Agent-1",
+                    "primary_cause": "System Timeout",
+                    "description": "Transaction timed out during processing",
+                    "estimated_resolution": "2024-01-15T12:00:00Z",
+                    "severity": "low"
                 }
             ]
         }
