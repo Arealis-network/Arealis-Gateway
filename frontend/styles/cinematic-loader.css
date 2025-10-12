@@ -1,0 +1,256 @@
+/* Cinematic Logo Loader Styles */
+
+:root {
+  /* Color Palette */
+  --deep-space-black: #000814;
+  --quantum-blue: #007BFF;
+  --gold-ember: #FFD166;
+  --soft-white: #F8F9FA;
+  
+  /* Custom color classes */
+  .bg-deep-space-black { background-color: var(--deep-space-black); }
+  .text-quantum-blue { color: var(--quantum-blue); }
+  .text-gold-ember { color: var(--gold-ember); }
+  .text-soft-white { color: var(--soft-white); }
+  .bg-quantum-blue { background-color: var(--quantum-blue); }
+  .bg-gold-ember { background-color: var(--gold-ember); }
+  .border-quantum-blue { border-color: var(--quantum-blue); }
+  .border-gold-ember { border-color: var(--gold-ember); }
+}
+
+/* Particle animation keyframes */
+@keyframes particleFloat {
+  0% {
+    transform: translateY(0px) translateX(0px);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) translateX(50px);
+    opacity: 0;
+  }
+}
+
+@keyframes circuitPulse {
+  0% {
+    stroke-dashoffset: 1000;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.8;
+  }
+}
+
+@keyframes logoGlow {
+  0% {
+    filter: drop-shadow(0 0 10px var(--quantum-blue));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px var(--quantum-blue)) drop-shadow(0 0 20px var(--gold-ember));
+  }
+  100% {
+    filter: drop-shadow(0 0 10px var(--quantum-blue));
+  }
+}
+
+@keyframes quantumSpark {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1) rotate(180deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes heartbeat {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes textReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+    filter: blur(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes neuralPulse {
+  0% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+}
+
+/* Particle system */
+.particle {
+  animation: particleFloat 3s infinite ease-in-out;
+}
+
+/* Circuit lines */
+.circuit-line {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: circuitPulse 2s ease-in-out forwards;
+}
+
+/* Logo glow effect */
+.logo-glow {
+  animation: logoGlow 3s infinite ease-in-out;
+}
+
+/* Quantum sparks */
+.quantum-spark {
+  animation: quantumSpark 1.5s infinite ease-in-out;
+}
+
+/* Heartbeat pulse */
+.heartbeat-pulse {
+  animation: heartbeat 1.5s ease-in-out;
+}
+
+/* Text reveal */
+.text-reveal {
+  animation: textReveal 1s ease-out forwards;
+}
+
+/* Neural network nodes */
+.neural-node {
+  animation: neuralPulse 2s infinite ease-in-out;
+}
+
+/* Gradient text effect */
+.gradient-text {
+  background: linear-gradient(135deg, var(--quantum-blue) 0%, var(--gold-ember) 50%, var(--quantum-blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Metallic shine effect */
+.metallic-shine {
+  background: linear-gradient(
+    45deg,
+    var(--deep-space-black) 0%,
+    var(--quantum-blue) 25%,
+    var(--gold-ember) 50%,
+    var(--quantum-blue) 75%,
+    var(--deep-space-black) 100%
+  );
+  background-size: 200% 200%;
+  animation: metallicShine 3s ease-in-out infinite;
+}
+
+@keyframes metallicShine {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Electric hum effect */
+.electric-hum {
+  position: relative;
+  overflow: hidden;
+}
+
+.electric-hum::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 123, 255, 0.1),
+    transparent
+  );
+  animation: electricSweep 2s infinite;
+}
+
+@keyframes electricSweep {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .logo-text {
+    font-size: 2.5rem;
+  }
+  
+  .subtitle-text {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-text {
+    font-size: 2rem;
+  }
+  
+  .subtitle-text {
+    font-size: 0.9rem;
+  }
+}
+
+/* Performance optimizations */
+.cinematic-loader * {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .cinematic-loader * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
