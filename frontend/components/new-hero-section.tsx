@@ -4,10 +4,16 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Play, Pause } from "lucide-react"
 import { useState, useRef } from "react"
+import { useArealisLoader } from "@/components/arealis-loader"
 
 export function NewHeroSection() {
   const [isPlaying, setIsPlaying] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { startLoader, ArealisLoaderComponent } = useArealisLoader()
+
+  const handleBookDemo = () => {
+    startLoader('book-demo')
+  }
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -21,7 +27,9 @@ export function NewHeroSection() {
   }
 
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-background via-primary/5 to-accent/5">
+    <>
+      {ArealisLoaderComponent}
+      <section className="relative overflow-hidden bg-gradient-to-br from-background via-primary/5 to-accent/5">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:24px_24px]" />
 
       <div className="container relative px-4 py-20 md:py-28 md:px-6">
@@ -38,8 +46,12 @@ export function NewHeroSection() {
             </p>
 
             <div className="flex flex-wrap gap-4">
-              <Button size="lg" className="font-semibold shadow-lg shadow-primary/25" asChild>
-                <Link href="/book-demo">Request a Demo</Link>
+              <Button 
+                size="lg" 
+                className="font-semibold shadow-lg shadow-primary/25" 
+                onClick={handleBookDemo}
+              >
+                Request a Demo
               </Button>
               <Button size="lg" variant="outline" className="font-semibold bg-transparent" asChild>
                 <Link href="/contact">Talk to Sales</Link>
@@ -101,5 +113,6 @@ export function NewHeroSection() {
         </div>
       </div>
     </section>
+    </>
   )
 }

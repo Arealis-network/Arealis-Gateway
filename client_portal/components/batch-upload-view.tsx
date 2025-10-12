@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, ArrowLeft } from "lucide-react"
 import { arealisApi, Transaction } from "@/lib/api"
 import { parseCSV, ParsedTransaction } from "@/lib/csv-parser"
+import { useArealisLoader } from "@/components/arealis-loader"
 
 type BatchState = "initial" | "file-selected" | "submitting" | "success"
 
@@ -28,6 +29,7 @@ export function BatchUploadView({ onBack }: BatchUploadViewProps) {
   const [batchId, setBatchId] = useState<string>("")
   const [error, setError] = useState<string>("")
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([])
+  const { startLoader, ArealisLoaderComponent } = useArealisLoader()
 
   const handleFileSelect = useCallback((selectedFile: File, data: CSVData) => {
     console.log('📁 File selected:', selectedFile.name, 'Size:', selectedFile.size)
@@ -77,6 +79,9 @@ export function BatchUploadView({ onBack }: BatchUploadViewProps) {
 
     setState("submitting")
     setError("")
+    
+    // Start the Arealis loader
+    startLoader('csv-upload', '/overview')
 
     try {
       // Validate API key first
@@ -149,7 +154,9 @@ export function BatchUploadView({ onBack }: BatchUploadViewProps) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <>
+      {ArealisLoaderComponent}
+      <div className="max-w-3xl mx-auto">
       <Button variant="ghost" onClick={onBack} className="mb-4">
         <ArrowLeft className="w-4 h-4 mr-2" />
         Back to Selection
@@ -197,5 +204,6 @@ export function BatchUploadView({ onBack }: BatchUploadViewProps) {
         </CardContent>
       </Card>
     </div>
+    </>
   )
 }
